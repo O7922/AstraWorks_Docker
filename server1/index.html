@@ -1,23 +1,35 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>Server1</title>
+  <meta charset="UTF-8">
+  <title>3D Viewer</title>
 
-<style>
-body{
-    background:blue;
-    color:white;
-    font-size:50px;
-    text-align:center;
-    margin-top:100px;
-}
-</style>
+  <script type="module"
+    src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js">
+  </script>
 
+  <style>
+    body{
+      margin:0;
+      background:#111;
+    }
+
+    model-viewer{
+      width:100vw;
+      height:100vh;
+    }
+  </style>
 </head>
+
 <body>
 
-サーバ1
+<model-viewer
+  src="gakkou04.glb"
+  alt="3D Model"
+  auto-rotate
+  camera-controls
+  shadow-intensity="1">
+</model-viewer>
 
 </body>
 </html>
