@@ -1,9 +1,11 @@
-FROM httpd:2.4
+FROM debian:12
 
-# デフォルトのApache設定を使用
-# /usr/local/apache2/htdocs/ がドキュメントルート
-
-# カスタムindex.htmlをコピー（任意）
-COPY src/ /usr/local/apache2/htdocs/
+RUN apt-get update && \
+    apt-get install -y apache2 && \
+    apt-get clean
 
 EXPOSE 80
+
+CMD ["apachectl", "-D", "FOREGROUND"]
+
+
