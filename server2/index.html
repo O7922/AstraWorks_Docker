@@ -3,540 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>イベント情報入力 | 日本工学院八王子専門学校 学内マップ管理システム</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
-    :root {
-      --bg:        #0f1117;
-      --surface:   #181c27;
-      --panel:     #1e2333;
-      --border:    #2a3050;
-      --accent:    #3b5bdb;
-      --accent-lt: #4c6ef5;
-      --accent-glow: rgba(59,91,219,0.25);
-      --success:   #2f9e44;
-      --warn:      #e67700;
-      --danger:    #c92a2a;
-      --text:      #e8eaf0;
-      --muted:     #8a94b0;
-      --label:     #a0a8c0;
-      --mono:      'JetBrains Mono', monospace;
-      --sans:      'Noto Sans JP', sans-serif;
-    }
-
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: var(--sans);
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* ── Top Bar ── */
-    .topbar {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 24px;
-      height: 52px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-    .topbar-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .logo-badge {
-      background: var(--accent);
-      color: #fff;
-      font-family: var(--mono);
-      font-size: 11px;
-      font-weight: 500;
-      padding: 3px 8px;
-      border-radius: 4px;
-      letter-spacing: .04em;
-    }
-    .topbar-title {
-      font-size: 13px;
-      color: var(--muted);
-      letter-spacing: .02em;
-    }
-    .topbar-title span { color: var(--text); font-weight: 500; }
-    .topbar-right {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-    .status-dot {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-    .status-dot::before {
-      content: '';
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      background: var(--success);
-      box-shadow: 0 0 6px var(--success);
-    }
-    .user-chip {
-      font-size: 12px;
-      color: var(--label);
-      background: var(--panel);
-      border: 1px solid var(--border);
-      padding: 4px 10px;
-      border-radius: 20px;
-    }
-
-    /* ── Layout ── */
-    .layout {
-      display: flex;
-      flex: 1;
-    }
-
-    /* ── Sidebar ── */
-    .sidebar {
-      width: 220px;
-      background: var(--surface);
-      border-right: 1px solid var(--border);
-      padding: 20px 0;
-      flex-shrink: 0;
-    }
-    .sidebar-section {
-      padding: 0 16px;
-      margin-bottom: 24px;
-    }
-    .sidebar-label {
-      font-size: 10px;
-      font-weight: 700;
-      color: var(--muted);
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-      padding: 0 4px;
-    }
-    .nav-item {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      padding: 8px 10px;
-      border-radius: 6px;
-      font-size: 13px;
-      color: var(--label);
-      cursor: pointer;
-      transition: background .15s, color .15s;
-      margin-bottom: 2px;
-    }
-    .nav-item:hover { background: var(--panel); color: var(--text); }
-    .nav-item.active {
-      background: var(--accent-glow);
-      color: var(--accent-lt);
-      border: 1px solid rgba(76,110,245,.3);
-    }
-    .nav-icon { font-size: 15px; opacity: .8; }
-    .nav-badge {
-      margin-left: auto;
-      background: var(--accent);
-      color: #fff;
-      font-size: 10px;
-      font-family: var(--mono);
-      padding: 1px 6px;
-      border-radius: 10px;
-    }
-
-    /* ── Main ── */
-    .main {
-      flex: 1;
-      padding: 28px 32px;
-      overflow-y: auto;
-    }
-
-    .page-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      margin-bottom: 24px;
-    }
-    .breadcrumb {
-      font-size: 11px;
-      color: var(--muted);
-      font-family: var(--mono);
-      margin-bottom: 6px;
-    }
-    .breadcrumb span { color: var(--accent-lt); }
-    .page-title {
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: -.01em;
-    }
-    .page-subtitle {
-      font-size: 12px;
-      color: var(--muted);
-      margin-top: 3px;
-    }
-    .header-actions {
-      display: flex;
-      gap: 10px;
-    }
-
-    /* ── Buttons ── */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 16px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-family: var(--sans);
-      font-weight: 500;
-      cursor: pointer;
-      border: none;
-      transition: filter .15s, transform .1s;
-    }
-    .btn:hover { filter: brightness(1.12); }
-    .btn:active { transform: scale(.98); }
-    .btn-primary { background: var(--accent); color: #fff; }
-    .btn-ghost {
-      background: transparent;
-      color: var(--label);
-      border: 1px solid var(--border);
-    }
-    .btn-ghost:hover { background: var(--panel); color: var(--text); filter: none; }
-    .btn-danger { background: var(--danger); color: #fff; }
-    .btn-sm { padding: 5px 12px; font-size: 12px; }
-
-    /* ── Card / Panel ── */
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;
-      margin-bottom: 20px;
-    }
-    .card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 14px 20px;
-      border-bottom: 1px solid var(--border);
-      background: rgba(255,255,255,.02);
-    }
-    .card-header-title {
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: .02em;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .card-header-title .icon { font-size: 15px; }
-    .card-body { padding: 20px; }
-
-    /* ── Form Grid ── */
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px 24px;
-    }
-    .form-grid .full { grid-column: 1 / -1; }
-
-    .field { display: flex; flex-direction: column; gap: 6px; }
-    .field-label {
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--label);
-      letter-spacing: .06em;
-      text-transform: uppercase;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-    .required {
-      color: #ff6b6b;
-      font-size: 10px;
-    }
-    .optional {
-      color: var(--muted);
-      font-size: 10px;
-      font-weight: 400;
-      letter-spacing: 0;
-      text-transform: none;
-    }
-
-    input[type="text"],
-    input[type="date"],
-    input[type="time"],
-    input[type="number"],
-    input[type="url"],
-    select,
-    textarea {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      font-family: var(--sans);
-      font-size: 13px;
-      padding: 9px 12px;
-      width: 100%;
-      transition: border-color .15s, box-shadow .15s;
-      outline: none;
-      -webkit-appearance: none;
-    }
-    input[type="text"]:focus,
-    input[type="date"]:focus,
-    input[type="time"]:focus,
-    input[type="number"]:focus,
-    input[type="url"]:focus,
-    select:focus,
-    textarea:focus {
-      border-color: var(--accent-lt);
-      box-shadow: 0 0 0 3px var(--accent-glow);
-    }
-    input::placeholder, textarea::placeholder { color: var(--muted); font-size: 12px; }
-    textarea { resize: vertical; min-height: 88px; line-height: 1.6; }
-    select { cursor: pointer; }
-    select option { background: var(--panel); }
-
-    /* date/time pair */
-    .datetime-row {
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      gap: 8px;
-      align-items: center;
-    }
-    .datetime-sep {
-      color: var(--muted);
-      font-size: 12px;
-      text-align: center;
-    }
-
-    /* Tag input */
-    .tag-wrap {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 7px 10px;
-      min-height: 40px;
-      align-items: center;
-      cursor: text;
-      transition: border-color .15s, box-shadow .15s;
-    }
-    .tag-wrap:focus-within {
-      border-color: var(--accent-lt);
-      box-shadow: 0 0 0 3px var(--accent-glow);
-    }
-    .tag {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      background: rgba(76,110,245,.18);
-      color: var(--accent-lt);
-      border: 1px solid rgba(76,110,245,.35);
-      border-radius: 4px;
-      font-size: 11px;
-      padding: 2px 8px;
-    }
-    .tag-remove { cursor: pointer; opacity: .6; font-size: 12px; }
-    .tag-remove:hover { opacity: 1; }
-    .tag-input {
-      border: none !important;
-      background: transparent !important;
-      padding: 0 !important;
-      flex: 1;
-      min-width: 100px;
-      font-size: 12px;
-      color: var(--text);
-      box-shadow: none !important;
-    }
-
-    /* Map picker */
-    .map-picker {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      overflow: hidden;
-    }
-    .map-placeholder {
-      height: 180px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      color: var(--muted);
-      font-size: 13px;
-      background: repeating-linear-gradient(
-        45deg,
-        transparent,
-        transparent 8px,
-        rgba(42,48,80,.5) 8px,
-        rgba(42,48,80,.5) 9px
-      );
-      position: relative;
-    }
-    .map-placeholder-icon { font-size: 32px; opacity: .35; }
-    .map-select-btn {
-      position: absolute;
-      bottom: 12px;
-      right: 12px;
-    }
-    .map-coords {
-      padding: 8px 12px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--muted);
-    }
-    .coord-val { color: var(--accent-lt); }
-
-    /* Image upload */
-    .upload-zone {
-      border: 2px dashed var(--border);
-      border-radius: 6px;
-      padding: 24px;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color .2s, background .2s;
-    }
-    .upload-zone:hover {
-      border-color: var(--accent-lt);
-      background: var(--accent-glow);
-    }
-    .upload-icon { font-size: 28px; opacity: .4; margin-bottom: 8px; }
-    .upload-text { font-size: 12px; color: var(--muted); }
-    .upload-text em { color: var(--accent-lt); font-style: normal; }
-
-    /* Toggle / Radio group */
-    .toggle-group {
-      display: flex;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      overflow: hidden;
-    }
-    .toggle-opt {
-      flex: 1;
-      padding: 8px;
-      text-align: center;
-      font-size: 12px;
-      color: var(--muted);
-      cursor: pointer;
-      transition: background .15s, color .15s;
-      user-select: none;
-    }
-    .toggle-opt.active {
-      background: var(--accent);
-      color: #fff;
-    }
-
-    /* Color dot selector */
-    .color-opts {
-      display: flex;
-      gap: 10px;
-    }
-    .color-dot {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      cursor: pointer;
-      position: relative;
-      border: 2px solid transparent;
-      transition: transform .15s;
-    }
-    .color-dot:hover { transform: scale(1.15); }
-    .color-dot.selected { border-color: #fff; box-shadow: 0 0 0 2px var(--accent-lt); }
-
-    /* Priority select */
-    .priority-row {
-      display: flex;
-      gap: 8px;
-    }
-    .priority-chip {
-      flex: 1;
-      padding: 7px;
-      text-align: center;
-      font-size: 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      background: var(--bg);
-      transition: .15s;
-    }
-    .priority-chip.low.active  { background: rgba(47,158,68,.15); border-color: var(--success); color: #69db7c; }
-    .priority-chip.mid.active  { background: rgba(230,119,0,.15); border-color: var(--warn); color: #ffa94d; }
-    .priority-chip.high.active { background: rgba(201,42,42,.15); border-color: var(--danger); color: #ff8787; }
-
-    /* Footer actions */
-    .form-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 20px;
-      border-top: 1px solid var(--border);
-      background: rgba(0,0,0,.2);
-    }
-    .footer-meta {
-      font-size: 11px;
-      color: var(--muted);
-      font-family: var(--mono);
-    }
-    .footer-actions { display: flex; gap: 10px; }
-
-    /* Info row */
-    .info-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(59,91,219,.1);
-      border: 1px solid rgba(76,110,245,.25);
-      border-radius: 6px;
-      padding: 10px 14px;
-      font-size: 12px;
-      color: var(--accent-lt);
-      margin-bottom: 16px;
-    }
-    .info-row span { opacity: .6; }
-
-    /* Hint text */
-    .hint {
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: 3px;
-    }
-
-    /* Divider */
-    .divider {
-      height: 1px;
-      background: var(--border);
-      margin: 4px 0 16px;
-    }
-
-    /* ── Responsive ── */
-    @media (max-width: 900px) {
-      .sidebar { display: none; }
-      .main { padding: 20px 16px; }
-      .form-grid { grid-template-columns: 1fr; }
-      .form-grid .full { grid-column: 1; }
-    }
-  </style>
+  <title>学内マップ管理システム | 日本工学院八王子専門学校</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -556,326 +24,350 @@
 
   <!-- Sidebar -->
   <nav class="sidebar">
-    <div class="sidebar-section">
-      <div class="sidebar-label">マップ管理</div>
-      <div class="nav-item"><span class="nav-icon">🗺️</span>マップビュー</div>
-      <div class="nav-item active"><span class="nav-icon">📅</span>イベント登録 <span class="nav-badge">New</span></div>
-      <div class="nav-item"><span class="nav-icon">📋</span>イベント一覧</div>
-      <div class="nav-item"><span class="nav-icon">📍</span>ピン管理</div>
+
+    <!-- マップ管理 -->
+    <div class="accordion">
+      <div class="accordion-header" data-target="acc-map">
+        <span class="accordion-icon">🗺️</span>
+        <span class="accordion-label">マップ管理</span>
+        <span class="accordion-arrow">▾</span>
+      </div>
+      <div class="accordion-body open" id="acc-map">
+        <div class="nav-item" data-page="map-view"><span class="nav-icon">🗺️</span>マップビュー</div>
+        <div class="nav-item active" data-page="event-reg" id="nav-event-reg"><span class="nav-icon">📅</span>イベント登録 <span class="nav-badge">New</span></div>
+        <div class="nav-item" data-page="event-list"><span class="nav-icon">📋</span>イベント一覧</div>
+        <div class="nav-item" data-page="pin-mgr"><span class="nav-icon">📍</span>ピン管理</div>
+      </div>
     </div>
-    <div class="sidebar-section">
-      <div class="sidebar-label">コンテンツ</div>
-      <div class="nav-item"><span class="nav-icon">🏢</span>施設情報</div>
-      <div class="nav-item"><span class="nav-icon">🚪</span>フロア管理</div>
-      <div class="nav-item"><span class="nav-icon">🖼️</span>メディア</div>
+
+    <!-- コンテンツ -->
+    <div class="accordion">
+      <div class="accordion-header" data-target="acc-content">
+        <span class="accordion-icon">📁</span>
+        <span class="accordion-label">コンテンツ</span>
+        <span class="accordion-arrow">▾</span>
+      </div>
+      <div class="accordion-body open" id="acc-content">
+        <div class="nav-item" data-page="facility"><span class="nav-icon">🏢</span>施設情報</div>
+        <div class="nav-item" data-page="floor"><span class="nav-icon">🚪</span>フロア管理</div>
+        <div class="nav-item" data-page="media"><span class="nav-icon">🖼️</span>メディア</div>
+      </div>
     </div>
-    <div class="sidebar-section">
-      <div class="sidebar-label">システム</div>
-      <div class="nav-item"><span class="nav-icon">📊</span>ダッシュボード</div>
-      <div class="nav-item"><span class="nav-icon">⚙️</span>設定</div>
-      <div class="nav-item"><span class="nav-icon">👥</span>ユーザー管理</div>
+
+    <!-- システム -->
+    <div class="accordion">
+      <div class="accordion-header" data-target="acc-sys">
+        <span class="accordion-icon">⚙️</span>
+        <span class="accordion-label">システム</span>
+        <span class="accordion-arrow">▾</span>
+      </div>
+      <div class="accordion-body open" id="acc-sys">
+        <div class="nav-item" data-page="dashboard"><span class="nav-icon">📊</span>ダッシュボード</div>
+        <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span>設定</div>
+        <div class="nav-item" data-page="users"><span class="nav-icon">👥</span>ユーザー管理</div>
+      </div>
     </div>
+
   </nav>
 
-  <!-- Main Content -->
+  <!-- Main Content（ダミーページ） -->
   <main class="main">
     <div class="page-header">
       <div>
-        <div class="breadcrumb">マップ管理 &rsaquo; <span>イベント登録</span></div>
-        <div class="page-title">イベント情報入力</div>
-        <div class="page-subtitle">学内マップに表示するイベントを登録します</div>
+        <div class="breadcrumb" id="breadcrumb">マップ管理 &rsaquo; <span>イベント登録</span></div>
+        <div class="page-title" id="page-title">学内マップ</div>
+        <div class="page-subtitle">左のメニューから操作を選択してください</div>
       </div>
       <div class="header-actions">
-        <button class="btn btn-ghost btn-sm">プレビュー</button>
-        <button class="btn btn-ghost btn-sm">下書き保存</button>
+        <button class="btn btn-primary btn-sm" id="openModalBtn">＋ イベント登録</button>
       </div>
     </div>
 
     <div class="info-row">
-      ℹ️ <span>登録後、マップ上のピンにイベント情報がリアルタイムで反映されます。公開設定をご確認ください。</span>
+      ℹ️ <span>「イベント登録」ボタン、またはサイドバーの「イベント登録」をクリックすると登録フォームが開きます。</span>
     </div>
 
-    <!-- 基本情報 -->
+    <!-- ダミーコンテンツ -->
     <div class="card">
       <div class="card-header">
-        <div class="card-header-title"><span class="icon">📌</span>基本情報</div>
-        <div style="font-size:11px;color:var(--muted);font-family:var(--mono)">ID: AUTO-ASSIGN</div>
+        <div class="card-header-title"><span class="icon">🗺️</span>マップビュー</div>
       </div>
       <div class="card-body">
-        <div class="form-grid">
-          <div class="field full">
-            <label class="field-label">イベント名称 <span class="required">必須</span></label>
-            <input type="text" placeholder="例：オープンキャンパス2025 春" />
-          </div>
-          <div class="field full">
-            <label class="field-label">サブタイトル <span class="optional">任意</span></label>
-            <input type="text" placeholder="例：IT・ゲーム・デザイン学科 合同説明会" />
-          </div>
-          <div class="field full">
-            <label class="field-label">イベント概要 <span class="required">必須</span></label>
-            <textarea placeholder="マップ上のポップアップに表示される説明文を入力してください。200文字以内推奨。"></textarea>
-            <div class="hint">※ 改行は表示に反映されます</div>
-          </div>
-          <div class="field">
-            <label class="field-label">イベントカテゴリ <span class="required">必須</span></label>
-            <select>
-              <option value="">── カテゴリを選択 ──</option>
-              <option>オープンキャンパス</option>
-              <option>学校説明会</option>
-              <option>体験入学</option>
-              <option>学内試験</option>
-              <option>進級・卒業式典</option>
-              <option>学園祭・文化祭</option>
-              <option>スポーツ大会</option>
-              <option>講演・セミナー</option>
-              <option>その他</option>
-            </select>
-          </div>
-          <div class="field">
-            <label class="field-label">対象学科 <span class="optional">任意</span></label>
-            <select>
-              <option value="">── 全学科共通 ──</option>
-              <option>ITカレッジ</option>
-              <option>クリエイターズカレッジ</option>
-              <option>エンジニアリングカレッジ</option>
-              <option>マネジメントカレッジ</option>
-              <option>保育・幼児教育科</option>
-            </select>
-          </div>
+        <div class="map-placeholder" style="height:360px;border-radius:6px;">
+          <div class="map-placeholder-icon" style="font-size:48px;">🗺️</div>
+          <div>学内マップがここに表示されます</div>
         </div>
       </div>
     </div>
-
-    <!-- 開催日時・場所 -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-header-title"><span class="icon">🕐</span>開催日時・場所</div>
-      </div>
-      <div class="card-body">
-        <div class="form-grid">
-          <div class="field">
-            <label class="field-label">開催開始 <span class="required">必須</span></label>
-            <div class="datetime-row">
-              <input type="date" />
-              <span class="datetime-sep">　</span>
-              <input type="time" />
-            </div>
-          </div>
-          <div class="field">
-            <label class="field-label">開催終了 <span class="required">必須</span></label>
-            <div class="datetime-row">
-              <input type="date" />
-              <span class="datetime-sep">　</span>
-              <input type="time" />
-            </div>
-          </div>
-
-          <div class="field">
-            <label class="field-label">マップ表示開始 <span class="optional">任意</span></label>
-            <input type="date" />
-            <div class="hint">未設定の場合は登録直後から表示されます</div>
-          </div>
-          <div class="field">
-            <label class="field-label">マップ表示終了 <span class="optional">任意</span></label>
-            <input type="date" />
-            <div class="hint">未設定の場合は開催終了後に自動で非表示になります</div>
-          </div>
-
-          <div class="field full"><div class="divider"></div></div>
-
-          <div class="field">
-            <label class="field-label">開催棟 <span class="required">必須</span></label>
-            <select>
-              <option value="">── 棟を選択 ──</option>
-              <option>A棟（管理棟）</option>
-              <option>B棟（IT棟）</option>
-              <option>C棟（クリエイター棟）</option>
-              <option>D棟（エンジニアリング棟）</option>
-              <option>E棟（マネジメント棟）</option>
-              <option>体育館</option>
-              <option>グラウンド</option>
-              <option>学生食堂</option>
-              <option>キャンパス全体</option>
-            </select>
-          </div>
-          <div class="field">
-            <label class="field-label">フロア・室番号 <span class="optional">任意</span></label>
-            <input type="text" placeholder="例：3F / 301教室 / 大ホール" />
-          </div>
-
-          <div class="field full">
-            <label class="field-label">マップ上の位置指定 <span class="required">必須</span></label>
-            <div class="map-picker">
-              <div class="map-placeholder">
-                <div class="map-placeholder-icon">🗺️</div>
-                <div>学内マップから位置を選択してください</div>
-                <button class="btn btn-primary btn-sm map-select-btn">📍 マップで選択</button>
-              </div>
-              <div class="map-coords">
-                X座標: <span class="coord-val">---</span>
-                　Y座標: <span class="coord-val">---</span>
-                　フロア: <span class="coord-val">---</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 表示設定 -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-header-title"><span class="icon">🎨</span>表示設定</div>
-      </div>
-      <div class="card-body">
-        <div class="form-grid">
-          <div class="field">
-            <label class="field-label">ピンカラー <span class="required">必須</span></label>
-            <div class="color-opts">
-              <div class="color-dot selected" style="background:#3b5bdb" title="ブルー"></div>
-              <div class="color-dot" style="background:#2f9e44" title="グリーン"></div>
-              <div class="color-dot" style="background:#e67700" title="オレンジ"></div>
-              <div class="color-dot" style="background:#c92a2a" title="レッド"></div>
-              <div class="color-dot" style="background:#862e9c" title="パープル"></div>
-              <div class="color-dot" style="background:#1098ad" title="シアン"></div>
-            </div>
-            <div class="hint">マップ上のピンアイコンの色</div>
-          </div>
-          <div class="field">
-            <label class="field-label">優先度 <span class="required">必須</span></label>
-            <div class="priority-row">
-              <div class="priority-chip low">低</div>
-              <div class="priority-chip mid active">中</div>
-              <div class="priority-chip high">高</div>
-            </div>
-            <div class="hint">高：バナー表示あり　中：通常ピン　低：縮小表示</div>
-          </div>
-          <div class="field">
-            <label class="field-label">公開ステータス <span class="required">必須</span></label>
-            <div class="toggle-group">
-              <div class="toggle-opt">下書き</div>
-              <div class="toggle-opt active">公開</div>
-              <div class="toggle-opt">非公開</div>
-            </div>
-          </div>
-          <div class="field">
-            <label class="field-label">アニメーション <span class="optional">任意</span></label>
-            <select>
-              <option>なし</option>
-              <option selected>パルス（点滅）</option>
-              <option>バウンス</option>
-              <option>フラッシュ</option>
-            </select>
-          </div>
-          <div class="field full">
-            <label class="field-label">タグ <span class="optional">任意</span></label>
-            <div class="tag-wrap" id="tagWrap">
-              <div class="tag">オープンキャンパス <span class="tag-remove" onclick="this.parentElement.remove()">✕</span></div>
-              <div class="tag">2025春 <span class="tag-remove" onclick="this.parentElement.remove()">✕</span></div>
-              <input class="tag-input" placeholder="タグを入力してEnter…" id="tagInput" />
-            </div>
-            <div class="hint">マップ検索・フィルタリングに使用されます</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 追加情報 -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-header-title"><span class="icon">📎</span>追加情報・メディア</div>
-      </div>
-      <div class="card-body">
-        <div class="form-grid">
-          <div class="field">
-            <label class="field-label">定員 <span class="optional">任意</span></label>
-            <input type="number" placeholder="例：200" min="0" />
-          </div>
-          <div class="field">
-            <label class="field-label">参加費 <span class="optional">任意</span></label>
-            <input type="text" placeholder="例：無料 / 1,000円" />
-          </div>
-          <div class="field">
-            <label class="field-label">担当者名 <span class="optional">任意</span></label>
-            <input type="text" placeholder="例：広報担当　山田" />
-          </div>
-          <div class="field">
-            <label class="field-label">お問い合わせ先 <span class="optional">任意</span></label>
-            <input type="text" placeholder="例：042-XXX-XXXX（代表）" />
-          </div>
-          <div class="field full">
-            <label class="field-label">外部リンクURL <span class="optional">任意</span></label>
-            <input type="url" placeholder="https://www.nit.ac.jp/hachioji/…" />
-          </div>
-          <div class="field full">
-            <label class="field-label">サムネイル画像 <span class="optional">任意</span></label>
-            <div class="upload-zone">
-              <div class="upload-icon">📁</div>
-              <div class="upload-text">ドラッグ＆ドロップ、または <em>クリックしてファイルを選択</em></div>
-              <div class="upload-text" style="margin-top:4px">PNG / JPG / WEBP　推奨サイズ：800×450px</div>
-            </div>
-          </div>
-          <div class="field full">
-            <label class="field-label">備考・管理メモ <span class="optional">任意</span></label>
-            <textarea placeholder="内部管理用メモ（マップ上には表示されません）" style="min-height:64px"></textarea>
-          </div>
-        </div>
-      </div>
-      <div class="form-footer">
-        <div class="footer-meta">最終更新: --- | 作成者: admin</div>
-        <div class="footer-actions">
-          <button class="btn btn-danger btn-sm">🗑 削除</button>
-          <button class="btn btn-ghost">キャンセル</button>
-          <button class="btn btn-ghost">下書き保存</button>
-          <button class="btn btn-primary">✅ 登録・公開</button>
-        </div>
-      </div>
-    </div>
-
   </main>
 </div>
 
-<script>
-  // Tag input
-  const tagInput = document.getElementById('tagInput');
-  const tagWrap  = document.getElementById('tagWrap');
-  tagInput.addEventListener('keydown', e => {
-    if ((e.key === 'Enter' || e.key === ',') && tagInput.value.trim()) {
-      e.preventDefault();
-      const tag = document.createElement('div');
-      tag.className = 'tag';
-      tag.innerHTML = tagInput.value.trim() + ' <span class="tag-remove">✕</span>';
-      tag.querySelector('.tag-remove').onclick = () => tag.remove();
-      tagWrap.insertBefore(tag, tagInput);
-      tagInput.value = '';
-    }
-  });
+<!-- ═══════════════════════════════════════════
+     モーダル：イベント登録フォーム
+═══════════════════════════════════════════ -->
+<div class="modal-overlay" id="eventModal">
+  <div class="modal">
 
-  // Color dot selection
-  document.querySelectorAll('.color-dot').forEach(dot => {
-    dot.addEventListener('click', () => {
-      document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('selected'));
-      dot.classList.add('selected');
-    });
-  });
+    <!-- モーダルヘッダー -->
+    <div class="modal-header">
+      <div>
+        <div class="breadcrumb">マップ管理 &rsaquo; <span>イベント登録</span></div>
+        <div class="modal-title">イベント情報入力</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn btn-ghost btn-sm">プレビュー</button>
+        <button class="btn btn-ghost btn-sm">下書き保存</button>
+        <button class="modal-close" id="closeModalBtn">✕</button>
+      </div>
+    </div>
 
-  // Toggle group
-  document.querySelectorAll('.toggle-group').forEach(group => {
-    group.querySelectorAll('.toggle-opt').forEach(opt => {
-      opt.addEventListener('click', () => {
-        group.querySelectorAll('.toggle-opt').forEach(o => o.classList.remove('active'));
-        opt.classList.add('active');
-      });
-    });
-  });
+    <!-- モーダルボディ（スクロール） -->
+    <div class="modal-body">
 
-  // Priority chips
-  document.querySelectorAll('.priority-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      chip.closest('.priority-row').querySelectorAll('.priority-chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-    });
-  });
-</script>
+      <div class="info-row">
+        ℹ️ <span>登録後、マップ上のピンにイベント情報がリアルタイムで反映されます。公開設定をご確認ください。</span>
+      </div>
+
+      <!-- 基本情報 -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-header-title"><span class="icon">📌</span>基本情報</div>
+          <div style="font-size:11px;color:var(--muted);font-family:var(--mono)">ID: AUTO-ASSIGN</div>
+        </div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="field full">
+              <label class="field-label">イベント名称 <span class="required">必須</span></label>
+              <input type="text" placeholder="例：オープンキャンパス2025 春" />
+            </div>
+            <div class="field full">
+              <label class="field-label">サブタイトル <span class="optional">任意</span></label>
+              <input type="text" placeholder="例：IT・ゲーム・デザイン学科 合同説明会" />
+            </div>
+            <div class="field full">
+              <label class="field-label">イベント概要 <span class="required">必須</span></label>
+              <textarea placeholder="マップ上のポップアップに表示される説明文を入力してください。200文字以内推奨。"></textarea>
+              <div class="hint">※ 改行は表示に反映されます</div>
+            </div>
+            <div class="field">
+              <label class="field-label">イベントカテゴリ <span class="required">必須</span></label>
+              <select>
+                <option value="">── カテゴリを選択 ──</option>
+                <option>オープンキャンパス</option>
+                <option>学校説明会</option>
+                <option>体験入学</option>
+                <option>学内試験</option>
+                <option>進級・卒業式典</option>
+                <option>学園祭・文化祭</option>
+                <option>スポーツ大会</option>
+                <option>講演・セミナー</option>
+                <option>その他</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label">対象学科 <span class="optional">任意</span></label>
+              <select>
+                <option value="">── 全学科共通 ──</option>
+                <option>ITカレッジ</option>
+                <option>クリエイターズカレッジ</option>
+                <option>エンジニアリングカレッジ</option>
+                <option>マネジメントカレッジ</option>
+                <option>保育・幼児教育科</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 開催日時・場所 -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-header-title"><span class="icon">🕐</span>開催日時・場所</div>
+        </div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="field">
+              <label class="field-label">開催開始 <span class="required">必須</span></label>
+              <div class="datetime-row">
+                <input type="date" />
+                <span class="datetime-sep">　</span>
+                <input type="time" />
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label">開催終了 <span class="required">必須</span></label>
+              <div class="datetime-row">
+                <input type="date" />
+                <span class="datetime-sep">　</span>
+                <input type="time" />
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label">マップ表示開始 <span class="optional">任意</span></label>
+              <input type="date" />
+              <div class="hint">未設定の場合は登録直後から表示されます</div>
+            </div>
+            <div class="field">
+              <label class="field-label">マップ表示終了 <span class="optional">任意</span></label>
+              <input type="date" />
+              <div class="hint">未設定の場合は開催終了後に自動で非表示になります</div>
+            </div>
+            <div class="field full"><div class="divider"></div></div>
+            <div class="field">
+              <label class="field-label">開催棟 <span class="required">必須</span></label>
+              <select>
+                <option value="">── 棟を選択 ──</option>
+                <option>A棟（管理棟）</option>
+                <option>B棟（IT棟）</option>
+                <option>C棟（クリエイター棟）</option>
+                <option>D棟（エンジニアリング棟）</option>
+                <option>E棟（マネジメント棟）</option>
+                <option>体育館</option>
+                <option>グラウンド</option>
+                <option>学生食堂</option>
+                <option>キャンパス全体</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field-label">フロア・室番号 <span class="optional">任意</span></label>
+              <input type="text" placeholder="例：3F / 301教室 / 大ホール" />
+            </div>
+            <div class="field full">
+              <label class="field-label">マップ上の位置指定 <span class="required">必須</span></label>
+              <div class="map-picker">
+                <div class="map-placeholder">
+                  <div class="map-placeholder-icon">🗺️</div>
+                  <div>学内マップから位置を選択してください</div>
+                  <button class="btn btn-primary btn-sm map-select-btn">📍 マップで選択</button>
+                </div>
+                <div class="map-coords">
+                  X座標: <span class="coord-val">---</span>
+                  　Y座標: <span class="coord-val">---</span>
+                  　フロア: <span class="coord-val">---</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 表示設定 -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-header-title"><span class="icon">🎨</span>表示設定</div>
+        </div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="field">
+              <label class="field-label">ピンカラー <span class="required">必須</span></label>
+              <div class="color-opts">
+                <div class="color-dot selected" style="background:#3b5bdb" title="ブルー"></div>
+                <div class="color-dot" style="background:#2f9e44" title="グリーン"></div>
+                <div class="color-dot" style="background:#e67700" title="オレンジ"></div>
+                <div class="color-dot" style="background:#c92a2a" title="レッド"></div>
+                <div class="color-dot" style="background:#862e9c" title="パープル"></div>
+                <div class="color-dot" style="background:#1098ad" title="シアン"></div>
+              </div>
+              <div class="hint">マップ上のピンアイコンの色</div>
+            </div>
+            <div class="field">
+              <label class="field-label">優先度 <span class="required">必須</span></label>
+              <div class="priority-row">
+                <div class="priority-chip low">低</div>
+                <div class="priority-chip mid active">中</div>
+                <div class="priority-chip high">高</div>
+              </div>
+              <div class="hint">高：バナー表示あり　中：通常ピン　低：縮小表示</div>
+            </div>
+            <div class="field">
+              <label class="field-label">公開ステータス <span class="required">必須</span></label>
+              <div class="toggle-group">
+                <div class="toggle-opt">下書き</div>
+                <div class="toggle-opt active">公開</div>
+                <div class="toggle-opt">非公開</div>
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label">アニメーション <span class="optional">任意</span></label>
+              <select>
+                <option>なし</option>
+                <option selected>パルス（点滅）</option>
+                <option>バウンス</option>
+                <option>フラッシュ</option>
+              </select>
+            </div>
+            <div class="field full">
+              <label class="field-label">タグ <span class="optional">任意</span></label>
+              <div class="tag-wrap" id="tagWrap">
+                <div class="tag">オープンキャンパス <span class="tag-remove" onclick="this.parentElement.remove()">✕</span></div>
+                <div class="tag">2025春 <span class="tag-remove" onclick="this.parentElement.remove()">✕</span></div>
+                <input class="tag-input" placeholder="タグを入力してEnter…" id="tagInput" />
+              </div>
+              <div class="hint">マップ検索・フィルタリングに使用されます</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 追加情報 -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-header-title"><span class="icon">📎</span>追加情報・メディア</div>
+        </div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="field">
+              <label class="field-label">定員 <span class="optional">任意</span></label>
+              <input type="number" placeholder="例：200" min="0" />
+            </div>
+            <div class="field">
+              <label class="field-label">参加費 <span class="optional">任意</span></label>
+              <input type="text" placeholder="例：無料 / 1,000円" />
+            </div>
+            <div class="field">
+              <label class="field-label">担当者名 <span class="optional">任意</span></label>
+              <input type="text" placeholder="例：広報担当　山田" />
+            </div>
+            <div class="field">
+              <label class="field-label">お問い合わせ先 <span class="optional">任意</span></label>
+              <input type="text" placeholder="例：042-XXX-XXXX（代表）" />
+            </div>
+            <div class="field full">
+              <label class="field-label">外部リンクURL <span class="optional">任意</span></label>
+              <input type="url" placeholder="https://www.nit.ac.jp/hachioji/…" />
+            </div>
+            <div class="field full">
+              <label class="field-label">サムネイル画像 <span class="optional">任意</span></label>
+              <div class="upload-zone">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">ドラッグ＆ドロップ、または <em>クリックしてファイルを選択</em></div>
+                <div class="upload-text" style="margin-top:4px">PNG / JPG / WEBP　推奨サイズ：800×450px</div>
+              </div>
+            </div>
+            <div class="field full">
+              <label class="field-label">備考・管理メモ <span class="optional">任意</span></label>
+              <textarea placeholder="内部管理用メモ（マップ上には表示されません）" style="min-height:64px"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /modal-body -->
+
+    <!-- モーダルフッター -->
+    <div class="modal-footer">
+      <div class="footer-meta">最終更新: --- | 作成者: admin</div>
+      <div class="footer-actions">
+        <button class="btn btn-danger btn-sm">🗑 削除</button>
+        <button class="btn btn-ghost" id="closeModalBtn2">キャンセル</button>
+        <button class="btn btn-ghost">下書き保存</button>
+        <button class="btn btn-primary">✅ 登録・公開</button>
+      </div>
+    </div>
+
+  </div><!-- /modal -->
+</div><!-- /modal-overlay -->
+
+<script src="main.js"></script>
 </body>
 </html>
