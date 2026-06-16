@@ -110,305 +110,165 @@ html,body{
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x222222);
 
-        const camera =
-        new THREE.PerspectiveCamera(
-        45,
-        window.innerWidth/window.innerHeight,
-        0.1,
-        10000
-        );
-
+        const camera = new THREE.PerspectiveCamera(45,window.innerWidth/window.innerHeight,0.1,10000);
         camera.position.set(5000,-5000,5000);
 
-        const renderer =
-        new THREE.WebGLRenderer({
-        antialias:true
-        });
+        const renderer = new THREE.WebGLRenderer({antialias:true});
 
-        renderer.setSize(
-        window.innerWidth,
-        window.innerHeight
-        );
+        renderer.setSize(window.innerWidth,window.innerHeight);
 
         document.body.appendChild(renderer.domElement);
 
-        const controls =
-        new OrbitControls(
-        camera,
-        renderer.domElement
-        );
-
+        //カメラ回転
+        const controls = new OrbitControls(camera,renderer.domElement);
         controls.enableDamping = true;
 
-        scene.add(
-        new THREE.AmbientLight(
-        0xffffff,
-        2
-        )
-        );
+        let offset = new THREE.Vector3();
+        // 初期差分
+        offset.subVectors(camera.position, controls.target);
 
-        const dir =
-        new THREE.DirectionalLight(
-        0xffffff,
-        2
-        );
+        // カメラ操作時に差分を更新
+        controls.addEventListener('change', () => {
+            offset.subVectors(camera.position, controls.target);
+        });
 
-        dir.position.set(
-        100,
-        200,
-        100
-        );
+        scene.add(new THREE.AmbientLight(0xffffff,2));
+
+        const dir = new THREE.DirectionalLight(0xffffff,2);
+
+        dir.position.set(100,200,100);
 
         scene.add(dir);
-
-        const marker =
-        document.getElementById("marker");
-
-        const coord =
-        document.getElementById("coord");
-
-        const loading =
-        document.getElementById("loading");
+        const marker = document.getElementById("marker");
+        const coord = document.getElementById("coord");
+        const loading = document.getElementById("loading");
 
         let terrain = null;
-
         /* NodeA */
-
-        const nodeA =
-        new THREE.Mesh(
-        new THREE.SphereGeometry(
-        1,
-        32,
-        32
-        ),
-        new THREE.MeshBasicMaterial({
-        color:0x00ff00
-        })
-        );
-
+        const nodeA = new THREE.Mesh(new THREE.SphereGeometry(1,32,32),new THREE.MeshBasicMaterial({color:0x00ff00}));
         scene.add(nodeA);
 
         /* Ray */
 
-        const raycaster =
-        new THREE.Raycaster();
+        const raycaster = new THREE.Raycaster();
 
         function updateIntersection(){
 
-        if(!terrain) return;
+            if(!terrain) return;
 
-        //左上のバーを取得してくる。
-        const x = parseFloat(
-            document.getElementById("sx").value
-        );
-        const z = parseFloat(
-            document.getElementById("sz").value
-        );
-        //ノードAの座標設定
-        nodeA.position.set(x,1000,z);
+            //左上のバーを取得してくる。
+            const x = parseFloat(
+                document.getElementById("sx").value
+            );
+            const z = parseFloat(
+                document.getElementById("sz").value
+            );
+            //ノードAの座標設定
+            nodeA.position.set(x,1000,z);
 
-        //開始位置がNodeA 方向が真下の直線レイを作成
-        raycaster.set( nodeA.position, new THREE.Vector3(0, -1, 0) );
+            //開始位置がNodeA 方向が真下の直線レイを作成
+            raycaster.set( nodeA.position, new THREE.Vector3(0, -1, 0) );
 
-        //レイをもちいて交点を求める。交点は複数あるかもしれないので配列に格納される。
-        const hits =
-            raycaster.intersectObject(
-            terrain,
-            true
-        );
+            //レイをもちいて交点を求める。交点は複数あるかもしれないので配列に格納される。
+            const hits =
+                raycaster.intersectObject(
+                terrain,
+                true
+            );
 
-        //交点が見つからなかったときの対応。
-        if(hits.length===0){
-            marker.style.display="none";
-            coord.innerHTML = "交点なし";
-            return;
-        }
+            //交点が見つからなかったときの対応。
+            if(hits.length===0){
+                marker.style.display="none";
+                coord.innerHTML = "交点なし";
+                return;
+            }
 
-        const p = hits[0].point;
+            //地面との交点P
+            const p = hits[0].point;
 
-        marker.style.display="block";
+            marker.style.display="block";
 
-        //xyz表示の為に座標取り出し
-        coord.innerHTML =
-            "X : "
-            + p.x.toFixed(3)
-            + "<br>Y : "
-            + p.y.toFixed(3)
-            + "<br>Z : "
-            + p.z.toFixed(3);
+            //xyz表示の為に座標取り出し
+            coord.innerHTML =
+                "X : "
+                + p.x.toFixed(3)
+                + "<br>Y : "
+                + p.y.toFixed(3)
+                + "<br>Z : "
+                + p.z.toFixed(3);
 
-        const screen = p.clone();
+            controls.target.set(p.x.toFixed(3),p.y.toFixed(3),p.z.toFixed(3));
 
-        screen.project(camera);
+            //controls.target.copy(p);
+            //カメラ追従    
+            controls.target.copy(p);
+            camera.position.copy(
+                p.clone().add(offset)
+            );
+            controls.update();
 
-        const sx =
-        (screen.x*0.5+0.5)
-        *
-        window.innerWidth;
+            //camera.position.set(0,-80,0);
 
-        const sy =
-        (-screen.y*0.5+0.5)
-        *
-        window.innerHeight;
+            //const saX = camera.position.x - p.x;
+            //const saY = camera.position.y - p.y;
+            //const saZ = camera.position.z - p.z;
 
-        marker.style.left =
-        sx + "px";
+            //camera.position.set(p.x + saX,p.y + saY,p.z + saZ);
 
-        marker.style.top =
-        sy + "px";
+            const screen = p.clone();
+
+            screen.project(camera);
+
+            const sx = (screen.x*0.5+0.5)*window.innerWidth;
+
+            const sy = (-screen.y*0.5+0.5)*window.innerHeight;
+
+            marker.style.left = sx + "px";
+
+            marker.style.top = sy + "px";
         }
 
         /* GLB Load */
-
-        const loader =
-        new GLTFLoader();
-
+        const loader = new GLTFLoader();
         loader.load(
 
-        "gakkou04.glb",
+            "gakkou04.glb",
+            (gltf)=>{
+                terrain = gltf.scene;
 
-        (gltf)=>{
+                scene.add(terrain);
 
-        terrain =
-        gltf.scene;
+                const box = new THREE.Box3().setFromObject(terrain);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
 
-        scene.add(
-        terrain
-        );
+                terrain.position.sub(center);
+                const maxDim = Math.max(size.x,size.y,size.z);
+                camera.position.set(maxDim,maxDim,maxDim);
+                controls.target.set(0,0,0);
+                camera.position.set(0,-80,0);
+                controls.target.set(0,-100,0);
 
-        const box =
-        new THREE.Box3()
-        .setFromObject(
-        terrain
-        );
+                controls.update();
+                loading.remove();
+                updateIntersection();
+                console.log("GLB Loaded");
 
-        const center =
-        box.getCenter(
-        new THREE.Vector3()
-        );
-
-        const size =
-        box.getSize(
-        new THREE.Vector3()
-        );
-
-        terrain.position.sub(
-        center
-        );
-
-        const maxDim =
-        Math.max(
-        size.x,
-        size.y,
-        size.z
-        );
-
-        camera.position.set(
-        maxDim,
-        maxDim,
-        maxDim
-        );
-
-        controls.target.set(
-        0,
-        0,
-        0
-        );
-
-        camera.position.set(0,-80,0);
-        controls.target.set(0,-100,0);
-
-        controls.update();
-
-        loading.remove();
-
-        updateIntersection();
-
-        console.log(
-        "GLB Loaded"
-        );
-
-        },
-
-        (xhr)=>{
-
-        if(xhr.total){
-
-        loading.innerHTML =
-        "Loading "
-        +
-        Math.round(
-        xhr.loaded /
-        xhr.total *
-        100
-        )
-        +
-        "%";
-
-        }
-
-        },
-
-        (error)=>{
-
-        loading.innerHTML =
-        "GLB Load Error";
-
-        console.error(
-        error
-        );
-
-        }
+            }
 
         );
 
-        document
-        .getElementById("sx")
-        .addEventListener(
-        "input",
-        updateIntersection
-        );
+        document.getElementById("sx").addEventListener("input",updateIntersection);
+        document.getElementById("sz").addEventListener("input",updateIntersection);
 
-        document
-        .getElementById("sz")
-        .addEventListener(
-        "input",
-        updateIntersection
-        );
-
-        window.addEventListener(
-        "resize",
-        ()=>{
-
-        camera.aspect =
-        window.innerWidth /
-        window.innerHeight;
-
-        camera.updateProjectionMatrix();
-
-        renderer.setSize(
-        window.innerWidth,
-        window.innerHeight
-        );
-
-        }
-        );
-
+        
         function animate(){
-
-        requestAnimationFrame(
-        animate
-        );
-
-        controls.update();
-
-        updateIntersection();
-
-        renderer.render(
-        scene,
-        camera
-        );
-
+            requestAnimationFrame(animate);
+            //カメラ回転
+            //controls.update();
+            //p計算　ターゲット変更　カメラ変更
+            updateIntersection();
+            renderer.render(scene,camera);
         }
 
         animate();
