@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply text-gray-800;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-card rounded-2xl shadow-sm border border-brand-100/60;
+  }
+  .btn-primary {
+    @apply bg-brand-400 hover:bg-brand-500 active:bg-brand-600
+           text-white font-medium rounded-full
+           transition-colors duration-150
+           shadow-sm;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1 px-3 py-1.5
+           bg-brand-50 text-brand-700 rounded-full text-xs font-medium;
+  }
+  .tab-btn {
+    @apply flex flex-col items-center gap-0.5 flex-1
+           py-2 text-gray-500 hover:text-brand-500
+           transition-colors;
+  }
+  .tab-btn.active {
+    @apply text-brand-500;
+  }
+}

@@ -1,9 +1,7 @@
-FROM debian:12
-
-RUN apt-get update && \
-    apt-get install -y apache2 && \
-    apt-get clean
-
-EXPOSE 80
-
-CMD ["apachectl", "-D", "FOREGROUND"]
+FROM node:22-alpine
+WORKDIR /app
+COPY src/package*.json ./
+RUN npm install
+COPY src/ ./
+EXPOSE 5173
+CMD ["npm", "run", "dev"]
