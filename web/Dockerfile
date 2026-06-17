@@ -1,7 +1,7 @@
 FROM node:22-alpine
 WORKDIR /app
-COPY src/features/home/package*.json ./
+COPY src/package*.json ./
 RUN npm install
-COPY src/features/home/ ./
+COPY src/ ./
 EXPOSE 5173
 CMD ["npm", "run", "dev"]

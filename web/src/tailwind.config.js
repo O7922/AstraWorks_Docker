@@ -1,6 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{ts,html}'],
+  content: [
+    './index.html',
+    './common/**/*.{ts,html}',
+    './features/**/*.{ts,html}',
+  ],
   theme: {
     extend: {
       colors: {
@@ -14,7 +18,7 @@ export default {
           600: '#7a4cc4',
           700: '#653ca8',
         },
-        bg: '#fbf7ff',
+        bg:   '#fbf7ff',
         card: '#ffffff',
       },
       fontFamily: {
