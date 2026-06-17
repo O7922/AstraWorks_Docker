@@ -2,6 +2,8 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 
+const placesRouter = require('./places');
+
 const app = express();
 
 app.use(cors()); 
@@ -13,6 +15,9 @@ app.use((req, res, next) => {
     );
     next();
 });
+
+app.use('/places', placesRouter);
+
 
 const pool = mysql.createPool({
     host: 'db',
