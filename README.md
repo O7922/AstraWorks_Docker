@@ -84,7 +84,7 @@ ports:
 変更後は `docker-compose down` してから `docker-compose up -d` で再起動してください。
 
 ##マージする際の注意事項
-```yaml
+```
 ports:
   - 班員にしっかりと伝達すること
 ```
