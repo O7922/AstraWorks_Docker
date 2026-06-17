@@ -5,7 +5,7 @@ services:
     ports:
       - "5173:5173"
     volumes:
-      - ./web/src:/app
+      - ./web/src/features/home:/app
       - /app/node_modules
     depends_on:
       - api
