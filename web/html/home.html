@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GLB Intersection Viewer</title>
+
+<style>
+
+html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:#111;
+    font-family:sans-serif;
+}
+
+#ui{
+    position:absolute;
+    left:10px;
+    top:10px;
+    z-index:100;
+    color:white;
+    background:rgba(0,0,0,.6);
+    padding:10px;
+    border-radius:8px;
+}
+
+#ui input{
+    width:220px;
+}
+
+#coord{
+    margin-top:10px;
+    font-size:12px;
+    line-height:1.5;
+}
+
+#marker{
+    position:absolute;
+    width:18px;
+    height:18px;
+    border-radius:50%;
+    background:red;
+    border:2px solid white;
+    transform:translate(-50%,-50%);
+    pointer-events:none;
+    z-index:99;
+}
+
+#loading{
+    position:absolute;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+    color:white;
+    font-size:20px;
+}
+
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js"
+  }
+}
+</script>
+
+</head>
+
+<body>
+    <!--左上のバー-->
+    <div id="loading">Loading GLB...</div>
+        <div id="ui">
+            <div>
+                X
+                <br>
+                <input id="sx"
+                type="range"
+                min="-100"
+                max="100"
+                step="0.1"
+                value="0">
+            </div>
+            <br>
+            <div>
+                Z
+                <br>
+                <input id="sz"
+                type="range"
+                min="-100"
+                max="100"
+                step="0.1"
+                value="0">
+            </div>
+        <div id="coord"></div><!--xyz表示-->
+    </div>
+    <div id="marker"></div><!--現在地を表すポインタ-->
+
+    <script type="module">
+
+        import * as THREE from "three";
+        import { OrbitControls }
+        from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/controls/OrbitControls.js";
+        import { GLTFLoader }
+        from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js";
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x222222);
+
+        const camera = new THREE.PerspectiveCamera(45,window.innerWidth/window.innerHeight,0.1,10000);
+        camera.position.set(5000,-5000,5000);
+
+        const renderer = new THREE.WebGLRenderer({antialias:true});
+
+        renderer.setSize(window.innerWidth,window.innerHeight);
+
+        document.body.appendChild(renderer.domElement);
+
+        //カメラ回転
+        const controls = new OrbitControls(camera,renderer.domElement);
+        controls.enableDamping = true;
+
+        let offset = new THREE.Vector3();
+        // 初期差分
+        offset.subVectors(camera.position, controls.target);
+
+        // カメラ操作時に差分を更新
+        controls.addEventListener('change', () => {
+            offset.subVectors(camera.position, controls.target);
+        });
+
+        scene.add(new THREE.AmbientLight(0xffffff,2));
+
+        const dir = new THREE.DirectionalLight(0xffffff,2);
+
+        dir.position.set(100,200,100);
+
+        scene.add(dir);
+        const marker = document.getElementById("marker");
+        const coord = document.getElementById("coord");
+        const loading = document.getElementById("loading");
+
+        let terrain = null;
+        /* NodeA */
+        const nodeA = new THREE.Mesh(new THREE.SphereGeometry(1,32,32),new THREE.MeshBasicMaterial({color:0x00ff00}));
+        scene.add(nodeA);
+
+        /* Ray */
+
+        const raycaster = new THREE.Raycaster();
+
+        function updateIntersection(){
+
+            if(!terrain) return;
+
+            //左上のバーを取得してくる。
+            const x = parseFloat(
+                document.getElementById("sx").value
+            );
+            const z = parseFloat(
+                document.getElementById("sz").value
+            );
+            //ノードAの座標設定
+            nodeA.position.set(x,1000,z);
+
+            //開始位置がNodeA 方向が真下の直線レイを作成
+            raycaster.set( nodeA.position, new THREE.Vector3(0, -1, 0) );
+
+            //レイをもちいて交点を求める。交点は複数あるかもしれないので配列に格納される。
+            const hits =
+                raycaster.intersectObject(
+                terrain,
+                true
+            );
+
+            //交点が見つからなかったときの対応。
+            if(hits.length===0){
+                marker.style.display="none";
+                coord.innerHTML = "交点なし";
+                return;
+            }
+
+            //地面との交点P
+            const p = hits[0].point;
+
+            marker.style.display="block";
+
+            //xyz表示の為に座標取り出し
+            coord.innerHTML =
+                "X : "
+                + p.x.toFixed(3)
+                + "<br>Y : "
+                + p.y.toFixed(3)
+                + "<br>Z : "
+                + p.z.toFixed(3);
+
+            controls.target.set(p.x.toFixed(3),p.y.toFixed(3),p.z.toFixed(3));
+
+            //controls.target.copy(p);
+            //カメラ追従    
+            controls.target.copy(p);
+            camera.position.copy(
+                p.clone().add(offset)
+            );
+            controls.update();
+
+            //camera.position.set(0,-80,0);
+
+            //const saX = camera.position.x - p.x;
+            //const saY = camera.position.y - p.y;
+            //const saZ = camera.position.z - p.z;
+
+            //camera.position.set(p.x + saX,p.y + saY,p.z + saZ);
+
+            const screen = p.clone();
+
+            screen.project(camera);
+
+            const sx = (screen.x*0.5+0.5)*window.innerWidth;
+
+            const sy = (-screen.y*0.5+0.5)*window.innerHeight;
+
+            marker.style.left = sx + "px";
+
+            marker.style.top = sy + "px";
+        }
+
+        /* GLB Load */
+        const loader = new GLTFLoader();
+        loader.load(
+
+            "gakkou04.glb",
+            (gltf)=>{
+                terrain = gltf.scene;
+
+                scene.add(terrain);
+
+                const box = new THREE.Box3().setFromObject(terrain);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+
+                terrain.position.sub(center);
+                const maxDim = Math.max(size.x,size.y,size.z);
+                camera.position.set(maxDim,maxDim,maxDim);
+                controls.target.set(0,0,0);
+                camera.position.set(0,-80,0);
+                controls.target.set(0,-100,0);
+
+                controls.update();
+                loading.remove();
+                updateIntersection();
+                console.log("GLB Loaded");
+
+
+                
+            }
+
+        );
+
+        document.getElementById("sx").addEventListener("input",updateIntersection);
+        document.getElementById("sz").addEventListener("input",updateIntersection);
+
+        
+        function animate(){
+            requestAnimationFrame(animate);
+            //カメラ回転
+            //controls.update();
+            //p計算　ターゲット変更　カメラ変更
+            updateIntersection();
+            renderer.render(scene,camera);
+        }
+
+        animate();
+
+    </script>
+
+</body>
+</html>
