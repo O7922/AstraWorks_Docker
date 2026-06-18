@@ -2,7 +2,8 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 
-const placesRouter = require('./places');
+const placesRouter = require('./routes/places');
+const placesUsers = require('./routes/users');
 
 const app = express();
 
@@ -16,36 +17,9 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use('/places', placesRouter);
-
-
-const pool = mysql.createPool({
-    host: 'db',
-    user: 'sampleuser',
-    password: 'samplepass',
-    database: 'sampledb',
-    charset: 'utf8mb4'
-});
-
-app.get('/users', async (req, res) => {
-
-    try {
-
-        const [rows] = await pool.query(
-            'SELECT id, name FROM users'
-        );
-
-        res.json(rows);
-
-    } catch (err) {
-
-        console.error(err);
-
-        res.status(500).json({
-            error: 'DB Error'
-        });
-    }
-});
+//api関数一覧。パスはroutes/*
+app.use('/routes/places', placesRouter);
+app.use('/routes/users', placesUsers);
 
 app.listen(3000, () => {
     console.log('API Server Start');
