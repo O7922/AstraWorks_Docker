@@ -9,3 +9,9 @@ const pool = mysql.createPool({
 });
 
 module.exports = pool;
+
+//(async () => {
+//    const conn = await pool.getConnection();
+//    await conn.query('SET NAMES utf8mb4');
+//    conn.release();
+//})();

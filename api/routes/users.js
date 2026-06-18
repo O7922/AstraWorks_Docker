@@ -3,9 +3,12 @@ const router = express.Router();
 const pool = require('../db.js');   // db.js がある場合
 
 router.get('/', async (req, res) => {
+    
+    const conn = await pool.getConnection();
 
     try {
 
+        await conn.query('SET NAMES utf8mb4');//UTF-8で接続
         const [rows] = await pool.query(
             'SELECT id, name FROM users'
         );
