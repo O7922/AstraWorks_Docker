@@ -24,9 +24,17 @@ export function renderHome(root: HTMLElement): void {
       ${MapPreview()}
     </main>
     ${BottomNav([
-      { label: 'マップ',   icon: '🗺',  active: true  },
-      { label: 'イベント', icon: '📅', active: false },
-      { label: '通知',     icon: '🔔', active: false },
+      { label: 'マップ',   icon: '🗺',  active: true,  href: '../map/3Dmap.html' },
+      { label: 'イベント', icon: '📅', active: false, href: '../event/event.html' },
+      { label: '通知',     icon: '🔔', active: false, href: '../notification/notification.html' },
     ])}
   `;
+
+  // クリック委譲: data-nav 属性を持つ要素のクリックを遷移に変換
+  root.addEventListener('click', (e) => {
+    const target = (e.target as HTMLElement).closest<HTMLElement>('[data-nav]');
+    if (!target) return;
+    const href = target.dataset.nav;
+    if (href) location.href = href;
+  });
 }
