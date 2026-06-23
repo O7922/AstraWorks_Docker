@@ -4,6 +4,7 @@ services:
     container_name: vite-web
     ports:
       - "5173:5173"
+      - "4173:4173"
     volumes:
       - ./web/src:/app
       - /app/node_modules
