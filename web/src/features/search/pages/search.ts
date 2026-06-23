@@ -1,33 +1,26 @@
 import { SearchHeader } from '../components/SearchHeader';
 import { SearchResultItem, type SearchResult } from '../components/SearchResultItem';
 
-// === モックデータ（APIマージ後は searchPlaces を fetch に置き換える） ===
-const MOCK_DATA: SearchResult[] = [
-  { id: 'B601', displayName: 'B棟601教室', building: 'B', floor: 6, distanceMeters: 100 },
-  { id: 'B602', displayName: 'B棟602教室', building: 'B', floor: 6, distanceMeters: 100 },
-  { id: 'B603', displayName: 'B棟603教室', building: 'B', floor: 6, distanceMeters: 100 },
-  { id: 'B604', displayName: 'B棟604教室', building: 'B', floor: 6, distanceMeters: 120 },
-  { id: 'B605', displayName: 'B棟605教室', building: 'B', floor: 6, distanceMeters: 130 },
-  { id: 'A101', displayName: 'A棟101教室', building: 'A', floor: 1, distanceMeters: 200 },
-  { id: 'A201', displayName: 'A棟201教室', building: 'A', floor: 2, distanceMeters: 180 },
-  { id: 'A301', displayName: 'A棟301教室', building: 'A', floor: 3, distanceMeters: 160 },
-  { id: 'C101', displayName: 'C棟101教室', building: 'C', floor: 1, distanceMeters: 250 },
-  { id: 'LIB',  displayName: '図書館',     building: '図', floor: 1, distanceMeters: 300 },
-];
+const API_BASE = 'http://localhost:3000';
 
-// API マージ後はここを fetch に置き換えるだけでOK
 async function searchPlaces(q: string): Promise<SearchResult[]> {
-  // TODO: 本実装
-  // const res = await fetch(`/api/places/search?q=${encodeURIComponent(q)}`);
-  // const data = await res.json();
-  // return data.results as SearchResult[];
+  if (!q) return [];
 
-  // --- モック: 部分一致での予測検索 ---
-  const lower = q.toLowerCase();
-  return MOCK_DATA.filter(r =>
-    r.displayName.toLowerCase().includes(lower) ||
-    r.id.toLowerCase().includes(lower)
-  );
+  // スペース・カンマ・読点で複数キーワードに分割
+  const tokens = q.split(/[\s,、　]+/).filter(Boolean);
+  if (tokens.length === 0) return [];
+
+  const params = new URLSearchParams();
+  for (const t of tokens) params.append('name', t);
+
+  const res = await fetch(`${API_BASE}/routes/places?${params}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data: Array<{ id: number; name: string }> = await res.json();
+
+  return data.map(d => ({
+    id: String(d.id),
+    displayName: d.name,
+  }));
 }
 
 export function renderSearch(root: HTMLElement): void {
@@ -70,7 +63,6 @@ export function renderSearch(root: HTMLElement): void {
 
   const input = root.querySelector<HTMLInputElement>('#search-input');
 
-  // 入力ごとに非同期検索。古いリクエストはreqIdで破棄
   let lastReqId = 0;
   input?.addEventListener('input', debounce(async () => {
     state.q = input.value.trim();
@@ -82,15 +74,21 @@ export function renderSearch(root: HTMLElement): void {
       return;
     }
 
-    const results = await searchPlaces(state.q);
-    if (reqId !== lastReqId) return; // レース防止
-    state.results = results;
-    paint();
+    try {
+      const results = await searchPlaces(state.q);
+      if (reqId !== lastReqId) return;
+      state.results = results;
+      paint();
+    } catch (err) {
+      if (reqId !== lastReqId) return;
+      console.error('[search] API error:', err);
+      state.results = [];
+      paint();
+    }
   }, 200));
 
-  paint(); // 初回描画（プロンプト表示）
+  paint();
 
-  // クリック委譲
   root.addEventListener('click', (e) => {
     const t = e.target as HTMLElement;
 
