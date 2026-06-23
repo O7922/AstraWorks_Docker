@@ -1,2 +1,4 @@
 web/dist/
 web/src/dist/
+web/src/tsconfig.tsbuildinfo
+*.tsbuildinfo
