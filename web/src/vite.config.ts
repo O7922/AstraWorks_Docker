@@ -14,8 +14,15 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        main: path.resolve(__dirname, 'index.html'),
-        map:  path.resolve(__dirname, 'features/map/3Dmap.html'),
+        main:         path.resolve(__dirname, 'index.html'),
+        home:         path.resolve(__dirname, 'features/home/index.html'),
+        map:          path.resolve(__dirname, 'features/map/index.html'),
+        map3d:        path.resolve(__dirname, 'features/map/3Dmap.html'),
+        search:       path.resolve(__dirname, 'features/search/search.html'),
+        navigation:   path.resolve(__dirname, 'features/navigation/navigation.html'),
+        notification: path.resolve(__dirname, 'features/notification/notification.html'),
+        event:        path.resolve(__dirname, 'features/event/event.html'),
+        admin:        path.resolve(__dirname, 'features/admin/admin.html'),
       },
     },
   },
