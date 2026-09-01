@@ -1,16 +1,33 @@
 import { defineConfig } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+
   root: '.',
+
   server: {
     host: '0.0.0.0',
     port: 5173,
     strictPort: true,
   },
+
+  plugins: [
+    {
+      name: 'copy-map',
+      closeBundle() {
+        fs.cpSync(
+          'features/map',
+          'dist/features/map',
+          { recursive: true }
+        );
+      },
+    },
+  ],
+
   build: {
     rollupOptions: {
       input: {
@@ -26,4 +43,5 @@ export default defineConfig({
       },
     },
   },
+
 });
