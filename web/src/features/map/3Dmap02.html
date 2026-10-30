@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPS Map Tracker Pro</title>
+<style>
+
+body{
+    margin:0;
+    background:#222;
+    text-align:center;
+    font-family:sans-serif;
+}
+
+/* 地図を映す「カメラのビューポート」。
+   ここより外は見えない = カメラが写す画面そのもの */
+#mapArea{
+    position:relative;
+    width:903px;
+    height:751px;
+    margin:20px auto;
+    overflow:hidden;
+    background:#000;
+    touch-action:none;      /* ブラウザ標準のスクロール/ピンチを止めて自前のカメラ操作に使う */
+    cursor:grab;
+    border:1px solid #444;
+}
+
+#mapArea.dragging{
+    cursor:grabbing;
+}
+
+/* ============================================================
+   #world : 2次元空間そのもの。
+   地図画像・軌跡・ピンはすべてこの「世界座標」の中に固定位置で存在する。
+   回転もズームも、この world 要素を直接変形させるのではなく、
+   world にかける transform(=カメラ行列)を通してのみ表現する。
+   ============================================================ */
+#world{
+    position:absolute;
+    left:0;
+    top:0;
+    width:903px;
+    height:751px;
+    transform-origin:0 0;
+    will-change:transform;
+}
+
+/* 地図 */
+#mapImage{
+    position:absolute;
+    left:0;
+    top:0;
+    width:903px;
+    height:751px;
+    user-select:none;
+    pointer-events:none;
+    -webkit-user-drag:none;
+}
+
+/* 軌跡 */
+#trace{
+    position:absolute;
+    left:0;
+    top:0;
+    width:903px;
+    height:751px;
+    pointer-events:none;
+}
+
+/* GPSピン */
+#pin{
+    position:absolute;
+    width:20px;
+    height:20px;
+    background:red;
+    border:3px solid white;
+    border-radius:50%;
+    transform:translate(-50%,-50%);
+    z-index:10;
+    box-shadow:0 0 8px black;
+    pointer-events:none;
+}
+
+/* カメラ操作パネル */
+#camPanel{
+    display:flex;
+    justify-content:center;
+    gap:8px;
+    margin-top:10px;
+    flex-wrap:wrap;
+}
+
+#camPanel button{
+    background:#333;
+    color:white;
+    border:1px solid #555;
+    border-radius:6px;
+    padding:8px 14px;
+    font-size:16px;
+    cursor:pointer;
+}
+
+#camPanel button:active{
+    background:#555;
+}
+
+/* 情報 */
+#info{
+    color:white;
+    margin-top:10px;
+    line-height:1.6;
+}
+
+#camInfo{
+    color:#8fdcff;
+    font-size:13px;
+}
+
+#helpText{
+    color:#999;
+    font-size:12px;
+    margin-top:6px;
+}
+
+</style>
+</head>
+<body>
+
+<div id="mapArea">
+    <div id="world">
+        <img id="mapImage" src="map04.jpg" draggable="false">
+        <canvas id="trace" width="903" height="751"></canvas>
+        <div id="pin"></div>
+    </div>
+</div>
+
+<div id="camPanel">
+    <button id="btnZoomOut">－ ズーム</button>
+    <button id="btnZoomIn">＋ ズーム</button>
+    <button id="btnRotL">⟲ 回転</button>
+    <button id="btnRotR">⟳ 回転</button>
+    <button id="btnReset">初期表示に戻す</button>
+</div>
+
+<div id="info">
+GPS待機中
+</div>
+<div id="camInfo"></div>
+<div id="helpText">
+    ドラッグ：移動　/　右ドラッグ or Shift+ドラッグ：回転　/　ホイール：ズーム　/　2本指：ピンチズーム・回転・移動
+</div>
+
+<script>
+
+
+//==========================
+// マップ設定
+//==========================
+
+//基準点1(左上である必要はなく、地図上のどこでもよい)
+const MAP_LeftTopLat = 284;          // 基準点1の地図ピクセルY座標
+const MAP_LeftTopLon = 265;          // 基準点1の地図ピクセルX座標
+const GPS_LeftTopLat = 35.629185;  // 基準点1の実緯度
+const GPS_LeftTopLon = 139.313602; // 基準点1の実経度
+
+//基準点2(基準点1と離れていれば、どの位置でもよい)
+const MAP_RightBottomLat = 543;     // 基準点2の地図ピクセルY座標
+const MAP_RightBottomLon = 527;     // 基準点2の地図ピクセルX座標
+const GPS_RightBottomLat = 35.616941;
+const GPS_RightBottomLon = 139.328481;
+
+//GPS 1度あたりのマップpx変化量(スケール係数)
+const keisuuX = (MAP_RightBottomLon - MAP_LeftTopLon) / (GPS_RightBottomLon - GPS_LeftTopLon);
+const keisuuY = (MAP_RightBottomLat - MAP_LeftTopLat) / (GPS_RightBottomLat - GPS_LeftTopLat);
+
+
+//==========================
+// DOM
+//==========================
+
+
+const mapArea = document.getElementById("mapArea");
+const world   = document.getElementById("world");
+const pin     = document.getElementById("pin");
+const info    = document.getElementById("info");
+const camInfo = document.getElementById("camInfo");
+const canvas  = document.getElementById("trace");
+const ctx     = canvas.getContext("2d");
+
+
+//==========================================================
+// カメラ
+//   x, y    : カメラが見ている「世界座標上の注視点」(=画面中央に映る点)
+//   angle   : カメラの向き(ラジアン)。値を変えることで世界が回転して見える
+//   zoom    : カメラの寄り具合。大きいほど「近づいた」ように大きく見える
+//             (実距離 distance を使うなら zoom = 1/distance に相当)
+//==========================================================
+
+//カメラ
+const camera = {
+    x: (MAP_LeftTopLon + MAP_RightBottomLon) / 2,
+    y: (MAP_LeftTopLat + MAP_RightBottomLat) / 2,
+    angle: 0,
+    zoom: 1
+};
+
+function resetCamera(){
+    camera.x = (MAP_LeftTopLon + MAP_RightBottomLon) / 2;
+    camera.y = (MAP_LeftTopLat + MAP_RightBottomLat) / 2;
+    camera.angle = 0;
+    camera.zoom = 1;
+    updateWorldTransform();
+}
+
+//ズームサイズ
+const MIN_ZOOM = 0.4;
+const MAX_ZOOM = 6;
+
+function clamp(v, min, max){
+    return Math.min(max, Math.max(min, v));
+}
+
+
+//==========================================================
+// 「カメラから投影する」ための変換行列
+//
+// world 上の点 p (ローカル座標=地図のピクセル座標) が
+// 画面上のどこに映るかは、次の合成変換で決まる：
+//
+//   screen = T(centerX,centerY) ・ R(angle) ・ S(zoom) ・ T(-camX,-camY) ・ p
+//
+// つまり
+//   1) カメラ位置が原点に来るように平行移動
+//   2) ズーム(距離)に応じて拡大縮小
+//   3) カメラの向きに応じて回転
+//   4) ビューポート中央へ平行移動
+//
+// これは画像そのものを回転させているのではなく、
+// 「2次元世界を、動くカメラのレンズを通して見ている」状態を
+// そのままCSSの合成transformとして表現したもの。
+//==========================================================
+
+function updateWorldTransform(){
+    const viewW = mapArea.clientWidth;
+    const viewH = mapArea.clientHeight;
+    const centerX = viewW / 2;
+    const centerY = viewH / 2;
+
+    world.style.transform =
+        `translate(${centerX}px, ${centerY}px) ` +
+        `rotate(${camera.angle}rad) ` +
+        `scale(${camera.zoom}) ` +
+        `translate(${-camera.x}px, ${-camera.y}px)`;
+
+    camInfo.innerHTML =
+        `カメラ角度: ${(camera.angle * 180 / Math.PI).toFixed(1)}°　` +
+        `ズーム: ${camera.zoom.toFixed(2)}x　` +
+        `注視点: (${camera.x.toFixed(0)}, ${camera.y.toFixed(0)})`;
+}
+
+
+// 画面上の点(mapArea基準のローカル座標)が、現在のカメラでは
+// 世界座標のどこに対応するかを求める(上記変換の逆変換)
+function screenToWorld(sx, sy){
+    const viewW = mapArea.clientWidth;
+    const viewH = mapArea.clientHeight;
+    const centerX = viewW / 2;
+    const centerY = viewH / 2;
+
+    const dx = sx - centerX;
+    const dy = sy - centerY;
+
+    const cosA = Math.cos(-camera.angle);
+    const sinA = Math.sin(-camera.angle);
+
+    const rx = dx * cosA - dy * sinA;
+    const ry = dx * sinA + dy * cosA;
+
+    return {
+        x: camera.x + rx / camera.zoom,
+        y: camera.y + ry / camera.zoom
+    };
+}
+
+
+// 画面上の指定点(アンカー)を中心にズームする
+// = ズーム前後で、アンカーの真下にある世界座標が変わらないように camera.x/y を補正する
+function zoomAt(sx, sy, factor){
+    const before = screenToWorld(sx, sy);
+
+    camera.zoom = clamp(camera.zoom * factor, MIN_ZOOM, MAX_ZOOM);
+
+    const after = screenToWorld(sx, sy);
+
+    camera.x += before.x - after.x;
+    camera.y += before.y - after.y;
+
+    updateWorldTransform();
+}
+
+
+// 画面上でのドラッグ量(dxScreen,dyScreen)ぶん、カメラの注視点を移動する
+// (カメラの回転・ズームを考慮して、画面上の見た目通りに動くよう変換する)
+function panByScreenDelta(dxScreen, dyScreen){
+    const cosA = Math.cos(-camera.angle);
+    const sinA = Math.sin(-camera.angle);
+
+    const rx = dxScreen * cosA - dyScreen * sinA;
+    const ry = dxScreen * sinA + dyScreen * cosA;
+
+    camera.x -= rx / camera.zoom;
+    camera.y -= ry / camera.zoom;
+}
+
+
+function rotateBy(deltaRad){
+    camera.angle += deltaRad;
+}
+
+
+function resetCamera(){
+    camera.x = MAP_WIDTH / 2;
+    camera.y = MAP_HEIGHT / 2;
+    camera.angle = 0;
+    camera.zoom = 1;
+    updateWorldTransform();
+}
+
+
+//==========================================================
+// カメラ操作: マウス / タッチ (Pointer Events で統一)
+//==========================================================
+
+const pointers = new Map(); // pointerId -> {x, y, button}
+let twoFingerState = null;  // {dist, angle, mid}
+
+function getLocalPos(clientX, clientY){
+    const rect = mapArea.getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
+}
+
+function getTwoFingerState(){
+    const pts = [...pointers.values()];
+    const p1 = pts[0];
+    const p2 = pts[1];
+    const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    return { dist, angle, mid };
+}
+
+mapArea.addEventListener("contextmenu", (e) => e.preventDefault());
+
+mapArea.addEventListener("pointerdown", (e) => {
+    mapArea.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button });
+    mapArea.classList.add("dragging");
+
+    if (pointers.size === 2){
+        twoFingerState = getTwoFingerState();
+    }
+});
+
+mapArea.addEventListener("pointermove", (e) => {
+    if (!pointers.has(e.pointerId)) return;
+
+    const prev = pointers.get(e.pointerId);
+    const cur = { x: e.clientX, y: e.clientY, button: prev.button };
+
+    if (pointers.size === 1){
+
+        const dx = cur.x - prev.x;
+        const dy = cur.y - prev.y;
+
+        const rotateMode = (prev.button === 2) || e.shiftKey;
+
+        if (rotateMode){
+            rotateBy(dx * 0.01);
+        }else{
+            panByScreenDelta(dx, dy);
+        }
+
+        updateWorldTransform();
+        pointers.set(e.pointerId, cur);
+
+    }else if (pointers.size === 2){
+
+        pointers.set(e.pointerId, cur);
+
+        const state = getTwoFingerState();
+
+        if (twoFingerState){
+            // ピンチ量からズーム倍率を算出し、2本指の中点を基準にズーム
+            const factor = state.dist / twoFingerState.dist;
+            zoomAt(state.mid.x, state.mid.y, factor);
+
+            // 2本指の角度変化ぶんカメラを回転
+            rotateBy(state.angle - twoFingerState.angle);
+
+            // 2本指の中点の移動ぶんカメラを平行移動
+            panByScreenDelta(
+                state.mid.x - twoFingerState.mid.x,
+                state.mid.y - twoFingerState.mid.y
+            );
+
+            updateWorldTransform();
+        }
+
+        twoFingerState = state;
+
+    }else{
+        pointers.set(e.pointerId, cur);
+    }
+});
+
+function endPointer(e){
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) twoFingerState = null;
+    if (pointers.size === 0) mapArea.classList.remove("dragging");
+}
+
+mapArea.addEventListener("pointerup", endPointer);
+mapArea.addEventListener("pointercancel", endPointer);
+
+mapArea.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const local = getLocalPos(e.clientX, e.clientY);
+    const factor = e.deltaY < 0 ? 1.1 : (1 / 1.1);
+    zoomAt(local.x, local.y, factor);
+}, { passive: false });
+
+
+//==========================================================
+// カメラ操作パネル(ボタン)
+//==========================================================
+
+document.getElementById("btnZoomIn").addEventListener("click", () => {
+    zoomAt(mapArea.clientWidth / 2, mapArea.clientHeight / 2, 1.25);
+});
+
+document.getElementById("btnZoomOut").addEventListener("click", () => {
+    zoomAt(mapArea.clientWidth / 2, mapArea.clientHeight / 2, 1 / 1.25);
+});
+
+document.getElementById("btnRotL").addEventListener("click", () => {
+    rotateBy(-15 * Math.PI / 180);
+    updateWorldTransform();
+});
+
+document.getElementById("btnRotR").addEventListener("click", () => {
+    rotateBy(15 * Math.PI / 180);
+    updateWorldTransform();
+});
+
+document.getElementById("btnReset").addEventListener("click", resetCamera);
+
+window.addEventListener("resize", updateWorldTransform);
+
+
+//==========================
+// GPS → マップ座標(世界座標)
+//==========================
+
+function gpsToMap(lat, lon){
+    let x = MAP_LeftTopLon + (lon - GPS_LeftTopLon) * keisuuX;
+    let y = MAP_LeftTopLat + (lat - GPS_LeftTopLat) * keisuuY;
+    return { x: x, y: y };
+}
+
+//==========================
+// GPS平滑化(指数移動平均)
+//   生のGPS値をそのまま使うとジグザグに飛ぶので、
+//   直前の値と重み付き平均をとって滑らかにする。
+//   alphaが小さいほど滑らかだが追従が遅くなる。
+//==========================
+
+let filteredLat = null;
+let filteredLon = null;
+const SMOOTHING_ALPHA = 0.2;
+
+function smoothGPS(lat, lon){
+    if (filteredLat === null){
+        filteredLat = lat;
+        filteredLon = lon;
+    }else{
+        filteredLat = filteredLat * (1 - SMOOTHING_ALPHA) + lat * SMOOTHING_ALPHA;
+        filteredLon = filteredLon * (1 - SMOOTHING_ALPHA) + lon * SMOOTHING_ALPHA;
+    }
+    return { lat: filteredLat, lon: filteredLon };
+}
+
+
+//==========================
+// 現在位置
+//==========================
+
+let currentX = null;
+let currentY = null;
+
+//軌跡
+let lastTraceX = null;
+let lastTraceY = null;
+
+
+//==========================
+// ピン滑らか移動(世界座標のまま。回転・ズームは world 側で自動的に反映される)
+//   同時に複数のアニメーションが走らないよう、
+//   新しい移動が来たら前のアニメーションをキャンセルする。
+//==========================
+
+let pinAnimationId = null;
+
+function movePin(x, y){
+
+    if (currentX === null){
+        currentX = x;
+        currentY = y;
+    }
+
+    let startX = currentX;
+    let startY = currentY;
+    let startTime = performance.now();
+    let duration = 500;
+
+    if (pinAnimationId){
+        cancelAnimationFrame(pinAnimationId);
+        pinAnimationId = null;
+    }
+
+    function animation(time){
+
+        let progress = (time - startTime) / duration;
+        if (progress > 1) progress = 1;
+
+        let nx = startX + (x - startX) * progress;
+        let ny = startY + (y - startY) * progress;
+
+        pin.style.left = nx + "px";
+        pin.style.top = ny + "px";
+
+        currentX = nx;
+        currentY = ny;
+
+        if (progress < 1){
+            pinAnimationId = requestAnimationFrame(animation);
+        }else{
+            pinAnimationId = null;
+        }
+    }
+
+    pinAnimationId = requestAnimationFrame(animation);
+}
+
+
+//==========================
+// 軌跡描画(世界座標のキャンバスにそのまま描く)
+//==========================
+
+function drawTrace(x, y){
+
+    if (lastTraceX !== null){
+        ctx.beginPath();
+        ctx.moveTo(lastTraceX, lastTraceY);
+        ctx.lineTo(x, y);
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "#ff3b3b";
+        ctx.stroke();
+    }
+
+    lastTraceX = x;
+    lastTraceY = y;
+}
+
+
+//==========================
+// GPS更新
+//==========================
+
+function updateGPS(lat, lon){
+
+    // 平滑化した緯度経度を採用する
+    let smoothed = smoothGPS(lat, lon);
+
+    let pos = gpsToMap(smoothed.lat, smoothed.lon);
+
+    pin.style.display = "block";
+
+    movePin(pos.x, pos.y);
+    drawTrace(pos.x, pos.y);
+
+    info.innerHTML =
+        "緯度 : " + smoothed.lat.toFixed(8) +
+        "<br>経度 : " + smoothed.lon.toFixed(8) +
+        "<br>X : " + pos.x.toFixed(1) +
+        "<br>Y : " + pos.y.toFixed(1);
+}
+
+//==========================
+// GPS開始
+//==========================
+
+let firstFixDone = false; // 初回の「速い雑fix」を受け取ったかどうか
+
+if (navigator.geolocation){
+
+    // ① 初回だけ:精度は問わず、とにかく速く1回だけ位置を取る
+    navigator.geolocation.getCurrentPosition(
+        function(position){
+            if (firstFixDone) return;
+
+            let lat = position.coords.latitude;
+            let lon = position.coords.longitude;
+
+            filteredLat = lat;
+            filteredLon = lon;
+
+            let pos = gpsToMap(lat, lon);
+
+            pin.style.display = "block";
+            pin.style.left = pos.x + "px";
+            pin.style.top  = pos.y + "px";
+            currentX = pos.x;
+            currentY = pos.y;
+
+            info.innerHTML =
+                "緯度 : " + lat.toFixed(8) +
+                "<br>経度 : " + lon.toFixed(8) +
+                "<br>X : " + pos.x.toFixed(1) +
+                "<br>Y : " + pos.y.toFixed(1) +
+                "<br>(概算位置)";
+        },
+        function(error){},
+        {
+            enableHighAccuracy: false,
+            maximumAge: 60000,
+            timeout: 3000
+        }
+    );
+
+    // ② 本命:高精度の継続監視(従来通り)
+    navigator.geolocation.watchPosition(
+
+        function(position){
+            firstFixDone = true; // 高精度の値が来たら以後は①を無視させる
+
+            let lat = position.coords.latitude;
+            let lon = position.coords.longitude;
+            let accuracy = position.coords.accuracy;
+
+            if (accuracy > 15){
+                return;
+            }
+
+            updateGPS(lat, lon);
+        },
+
+        function(error){
+            info.innerHTML = "GPSエラー : " + error.message;
+        },
+
+        {
+            enableHighAccuracy: true,
+            maximumAge: 1000,
+            timeout: 5000
+        }
+    );
+
+}else{
+    info.innerHTML = "GPS非対応です";
+}
+
+
+//==========================
+// 初期カメラ表示
+//==========================
+
+updateWorldTransform();
+
+</script>
+</body>
+</html>

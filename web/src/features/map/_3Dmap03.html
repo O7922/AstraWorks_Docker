@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GLB Intersection Viewer</title>
+
+<style>
+html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #111;
+    font-family: sans-serif;
+}
+
+#ui {
+    position: absolute;
+    left: 10px;
+    top: 10px;
+    z-index: 100;
+    color: #fff;
+    background: rgba(0, 0, 0, .6);
+    padding: 10px;
+    border-radius: 8px;
+}
+
+#ui input {
+    width: 220px;
+}
+
+#coord {
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+#marker {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: red;
+    border: 2px solid white;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 99;
+}
+
+#loading {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 20px;
+}
+</style>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js"
+    }
+}
+</script>
+</head>
+
+<body>
+
+<div id="loading">Loading GLB...</div>
+
+<div id="ui">
+    <div>
+        X<br>
+        <input id="sx" type="range"
+            min="-100" max="100" step="0.1" value="0">
+    </div>
+
+    <br>
+
+    <div>
+        Z<br>
+        <input id="sz" type="range"
+            min="-100" max="100" step="0.1" value="0">
+    </div>
+
+    <div id="coord"></div>
+</div>
+
+<div id="marker"></div>
+
+<script type="module">
+
+import * as THREE from "three";
+import { OrbitControls } from
+    "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/controls/OrbitControls.js";
+import { GLTFLoader } from
+    "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js";
+
+
+// --------------------------------------------------
+// DOM
+// --------------------------------------------------
+
+const sxInput = document.getElementById("sx");
+const szInput = document.getElementById("sz");
+const marker  = document.getElementById("marker");
+const coord   = document.getElementById("coord");
+const loading = document.getElementById("loading");
+
+
+// --------------------------------------------------
+// Three.js
+// --------------------------------------------------
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x222222);
+
+const camera = new THREE.PerspectiveCamera(
+    45,
+    innerWidth / innerHeight,
+    0.1,
+    10000
+);
+
+camera.position.set(5000, -5000, 5000);
+
+const renderer = new THREE.WebGLRenderer({
+    antialias: true
+});
+
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setSize(innerWidth, innerHeight);
+
+document.body.appendChild(renderer.domElement);
+
+
+// --------------------------------------------------
+// Controls
+// --------------------------------------------------
+
+const controls = new OrbitControls(
+    camera,
+    renderer.domElement
+);
+
+controls.enableDamping = false;
+
+
+// カメラとターゲットの相対位置
+const offset = new THREE.Vector3()
+    .subVectors(camera.position, controls.target);
+
+controls.addEventListener("change", () => {
+    offset.subVectors(camera.position, controls.target);
+});
+
+
+// --------------------------------------------------
+// Lights
+// --------------------------------------------------
+
+scene.add(
+    new THREE.AmbientLight(0xffffff, 2)
+);
+
+const directionalLight = new THREE.DirectionalLight(
+    0xffffff,
+    2
+);
+
+directionalLight.position.set(100, 200, 100);
+scene.add(directionalLight);
+
+
+// --------------------------------------------------
+// Node A
+// --------------------------------------------------
+
+const nodeA = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 16, 16),
+    new THREE.MeshBasicMaterial({
+        color: 0x00ff00
+    })
+);
+
+scene.add(nodeA);
+
+
+// --------------------------------------------------
+// Raycaster
+// --------------------------------------------------
+
+const raycaster = new THREE.Raycaster();
+
+const rayDirection = new THREE.Vector3(0, -1, 0);
+const screenPosition = new THREE.Vector3();
+const intersectionPoint = new THREE.Vector3();
+
+let terrain = null;
+let hasIntersection = false;
+
+
+// --------------------------------------------------
+// Intersection
+// --------------------------------------------------
+
+function updateIntersection() {
+
+    if (!terrain) return;
+
+    const x = Number(sxInput.value);
+    const z = Number(szInput.value);
+
+    // Node A
+    nodeA.position.set(x, 1000, z);
+
+    // Raycast
+    raycaster.set(nodeA.position, rayDirection);
+
+    const hits = raycaster.intersectObject(terrain, true);
+
+    if (!hits.length) {
+        hasIntersection = false;
+        marker.style.display = "none";
+        coord.textContent = "交点なし";
+        return;
+    }
+
+    hasIntersection = true;
+
+    // 交点を再利用Vector3へコピー
+    intersectionPoint.copy(hits[0].point);
+
+    // 座標表示
+    coord.innerHTML =
+        `X : ${intersectionPoint.x.toFixed(3)}<br>` +
+        `Y : ${intersectionPoint.y.toFixed(3)}<br>` +
+        `Z : ${intersectionPoint.z.toFixed(3)}`;
+
+    marker.style.display = "block";
+
+    // カメラ追従
+    controls.target.copy(intersectionPoint);
+
+    camera.position
+        .copy(intersectionPoint)
+        .add(offset);
+
+    controls.update();
+
+    updateMarkerPosition();
+}
+
+
+// --------------------------------------------------
+// Marker
+// --------------------------------------------------
+
+function updateMarkerPosition() {
+
+    if (!hasIntersection) return;
+
+    screenPosition.copy(intersectionPoint);
+    screenPosition.project(camera);
+
+    const x =
+        (screenPosition.x * 0.5 + 0.5) * innerWidth;
+
+    const y =
+        (-screenPosition.y * 0.5 + 0.5) * innerHeight;
+
+    marker.style.left = `${x}px`;
+    marker.style.top = `${y}px`;
+}
+
+
+// --------------------------------------------------
+// GLB Load
+// --------------------------------------------------
+
+const loader = new GLTFLoader();
+
+loader.load(
+    "minamino.glb",
+
+    gltf => {
+
+        terrain = gltf.scene;
+        scene.add(terrain);
+
+        // モデルを原点へ移動
+        const box = new THREE.Box3()
+            .setFromObject(terrain);
+
+        const center = box.getCenter(
+            new THREE.Vector3()
+        );
+
+        terrain.position.sub(center);
+
+        // 初期カメラ
+        camera.position.set(0, -80, 0);
+        controls.target.set(0, -100, 0);
+
+        controls.update();
+
+        loading.remove();
+
+        updateIntersection();
+
+        console.log("GLB Loaded");
+    },
+
+    undefined,
+
+    error => {
+        console.error("GLB Load Error:", error);
+        loading.textContent = "GLB Load Error";
+    }
+);
+
+
+// --------------------------------------------------
+// Slider
+// --------------------------------------------------
+
+sxInput.addEventListener("input", updateIntersection);
+szInput.addEventListener("input", updateIntersection);
+
+
+// --------------------------------------------------
+// Resize
+// --------------------------------------------------
+
+window.addEventListener("resize", () => {
+
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+
+    renderer.setSize(innerWidth, innerHeight);
+
+    updateMarkerPosition();
+});
+
+
+// --------------------------------------------------
+// Animation
+// --------------------------------------------------
+
+function animate() {
+
+    requestAnimationFrame(animate);
+
+    // OrbitControlsのDampingだけ毎フレーム処理
+    controls.update();
+
+    // カメラが動いた場合だけマーカー位置を更新
+    if (hasIntersection) {
+        updateMarkerPosition();
+    }
+
+    renderer.render(scene, camera);
+}
+
+animate();
+
+</script>
+
+</body>
+</html>

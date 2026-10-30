@@ -29,8 +29,14 @@ html, body {
     max-width: 130px;
 }
 
-#ui #info {
-    white-space: pre-line;
+#ui #info { white-space: pre-line; }
+
+#gpsCoords {
+    margin-bottom: 3px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid #444;
+    word-break: break-all;
+    font-size: 9px;
 }
 
 #ui .row {
@@ -50,36 +56,15 @@ html, body {
     cursor: pointer;
 }
 
-#ui button.active {
-    background: #2b6cb0;
-    border-color: #4a90d9;
-}
+#ui button#btnGPSRetry { background: #245b3a; border-color: #4caf50; }
+#ui button.active { background: #2b6cb0; border-color: #4a90d9; }
+#ui button:active { background: #555; }
+#ui button#btnRoute { background: #7a4a00; border-color: #ffb300; }
+#ui button#btnRoute:active { background: #a56400; }
 
-#ui button:active {
-    background: #555;
-}
-
-#ui button#btnRoute {
-    background: #7a4a00;
-    border-color: #ffb300;
-}
-
-#ui button#btnRoute:active {
-    background: #a56400;
-}
-
-#manualControls {
-    margin-top: 3px;
-    display: none;
-}
-
-#manualControls.visible {
-    display: block;
-}
-
-#manualControls input {
-    width: 100%;
-}
+#manualControls { margin-top: 3px; display: none; }
+#manualControls.visible { display: block; }
+#manualControls input { width: 100%; }
 
 #routeInfo {
     margin-top: 3px;
@@ -90,12 +75,25 @@ html, body {
     padding-top: 3px;
     display: none;
 }
+#routeInfo.visible { display: block; }
 
-#routeInfo.visible {
-    display: block;
+#btnLocate {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    z-index: 120;
+    background: #2b6cb0;
+    color: #fff;
+    border: 1px solid #4a90d9;
+    border-radius: 24px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .6);
 }
+#btnLocate:active { background: #1e4d78; }
 
-/* ===== 検索窓 / 候補一覧(プルダウン) ===== */
 #searchBox {
     position: absolute;
     left: 50%;
@@ -117,10 +115,7 @@ html, body {
     color: #fff;
     outline: none;
 }
-
-#searchInput::placeholder {
-    color: #aaa;
-}
+#searchInput::placeholder { color: #aaa; }
 
 #searchResults {
     display: none;
@@ -131,10 +126,7 @@ html, body {
     border: 1px solid #555;
     border-radius: 8px;
 }
-
-#searchResults.visible {
-    display: block;
-}
+#searchResults.visible { display: block; }
 
 .searchResultItem {
     padding: 10px 12px;
@@ -143,29 +135,11 @@ html, body {
     border-bottom: 1px solid #333;
     cursor: pointer;
 }
-
-.searchResultItem:last-child {
-    border-bottom: none;
-}
-
-.searchResultItem:active,
-.searchResultItem:hover {
-    background: #2b6cb0;
-}
-
-.searchResultItem.selected {
-    background: #1e4d78;
-}
-
-.searchResultItem.empty {
-    color: #888;
-    cursor: default;
-}
-
-.searchResultItem.empty:hover,
-.searchResultItem.empty:active {
-    background: transparent;
-}
+.searchResultItem:last-child { border-bottom: none; }
+.searchResultItem:active, .searchResultItem:hover { background: #2b6cb0; }
+.searchResultItem.selected { background: #1e4d78; }
+.searchResultItem.empty { color: #888; cursor: default; }
+.searchResultItem.empty:hover, .searchResultItem.empty:active { background: transparent; }
 
 #marker {
     position: absolute;
@@ -195,10 +169,11 @@ html, body {
 <script type="importmap">
 {
     "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js"
+        "three": "./three/three.module.js"
     }
 }
 </script>
+
 </head>
 
 <body>
@@ -211,11 +186,16 @@ html, body {
 </div>
 
 <div id="ui">
+    <div id="gpsCoords">
+        緯度: <span id="lat">---</span><br>
+        経度: <span id="lon">---</span>
+    </div>
+
     <div id="info">GPS待機中</div>
 
     <div class="row">
         <button id="btnMode">手動モードに切替</button>
-        <button id="btnFollow" class="active">カメラ追従: ON</button>
+        <button id="btnGPSRetry" title="位置情報の取得を再試行">GPS再試行</button>
     </div>
 
     <div class="row">
@@ -232,19 +212,21 @@ html, body {
 
 <div id="marker"></div>
 
+<button id="btnLocate" title="現在地にカメラを合わせる">📍 現在地</button>
+
 <script type="module">
 
 import * as THREE from "three";
+
 import { OrbitControls } from
-    "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/controls/OrbitControls.js";
+    "./three/examples/jsm/controls/OrbitControls.js";
+
 import { GLTFLoader } from
-    "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js";
+    "./three/examples/jsm/loaders/GLTFLoader.js";
 
 
 //==========================================================
 // GLB内オブジェクトのカスタムプロパティ(緯度経度)を探すためのキー候補
-// Blenderで付けたカスタムプロパティの名前がこれと違う場合は
-// ここに実際のキー名を追加してください。
 //==========================================================
 
 const LEFTTOP_LAT_KEYS = ["GPS_LeftTopLat", "lat", "Lat", "LAT", "latitude", "Latitude"];
@@ -255,18 +237,13 @@ const RIGHTBOTTOM_LON_KEYS = ["GPS_RightBottomLon", "lon", "Lon", "LON", "lng", 
 function findUserDataValue(userData, candidates) {
     if (!userData) return null;
 
+    const keys = Object.keys(userData);
     for (const key of candidates) {
-        if (userData[key] !== undefined) return Number(userData[key]);
+        const actualKey = keys.find(k => k.toLowerCase() === key.toLowerCase());
+        if (actualKey === undefined) continue;
+        const value = Number(userData[actualKey]);
+        if (Number.isFinite(value)) return value;
     }
-
-    const lowerMap = {};
-    for (const k in userData) lowerMap[k.toLowerCase()] = userData[k];
-
-    for (const key of candidates) {
-        const v = lowerMap[key.toLowerCase()];
-        if (v !== undefined) return Number(v);
-    }
-
     return null;
 }
 
@@ -359,8 +336,20 @@ function setupReferencePoints(gltfScene) {
         return false;
     }
 
-    keisuuX = (MAP_RightBottomLon - MAP_LeftTopLon) / (GPS_RightBottomLon - GPS_LeftTopLon);
-    keisuuY = (MAP_RightBottomLat - MAP_LeftTopLat) / (GPS_RightBottomLat - GPS_LeftTopLat);
+    const gpsLonSpan = GPS_RightBottomLon - GPS_LeftTopLon;
+    const gpsLatSpan = GPS_RightBottomLat - GPS_LeftTopLat;
+    if (Math.abs(gpsLonSpan) < 1e-12 || Math.abs(gpsLatSpan) < 1e-12) {
+        info.textContent = "エラー: 基準点の緯度または経度が同じ値です。GLBのGPSプロパティを確認してください。";
+        console.error("基準点の緯度経度の差が0です", { gpsLonSpan, gpsLatSpan });
+        return false;
+    }
+    keisuuX = (MAP_RightBottomLon - MAP_LeftTopLon) / gpsLonSpan;
+    keisuuY = (MAP_RightBottomLat - MAP_LeftTopLat) / gpsLatSpan;
+    if (!Number.isFinite(keisuuX) || !Number.isFinite(keisuuY)) {
+        info.textContent = "エラー: GPS座標と地図座標の変換係数を計算できません。";
+        console.error("変換係数が不正です", { keisuuX, keisuuY });
+        return false;
+    }
 
     console.log("基準点セットアップ完了", {
         GPS_LeftTopLat, GPS_LeftTopLon, GPS_RightBottomLat, GPS_RightBottomLon,
@@ -379,26 +368,6 @@ function gpsToWorld(lat, lon) {
 
 
 //==========================
-// GPS平滑化(指数移動平均)
-//==========================
-
-let filteredLat = null;
-let filteredLon = null;
-const SMOOTHING_ALPHA = 0.2;
-
-function smoothGPS(lat, lon) {
-    if (filteredLat === null) {
-        filteredLat = lat;
-        filteredLon = lon;
-    } else {
-        filteredLat = filteredLat * (1 - SMOOTHING_ALPHA) + lat * SMOOTHING_ALPHA;
-        filteredLon = filteredLon * (1 - SMOOTHING_ALPHA) + lon * SMOOTHING_ALPHA;
-    }
-    return { lat: filteredLat, lon: filteredLon };
-}
-
-
-//==========================
 // DOM
 //==========================
 
@@ -408,8 +377,9 @@ const marker = document.getElementById("marker");
 const loading = document.getElementById("loading");
 
 const btnMode = document.getElementById("btnMode");
-const btnFollow = document.getElementById("btnFollow");
+const btnGPSRetry = document.getElementById("btnGPSRetry");
 const btnRoute = document.getElementById("btnRoute");
+const btnLocate = document.getElementById("btnLocate");
 const manualControls = document.getElementById("manualControls");
 const routeInfo = document.getElementById("routeInfo");
 const sxInput = document.getElementById("sx");
@@ -419,20 +389,16 @@ const searchBox = document.getElementById("searchBox");
 const searchInput = document.getElementById("searchInput");
 const searchResults = document.getElementById("searchResults");
 
+const latEl = document.getElementById("lat");
+const lonEl = document.getElementById("lon");
+
 let manualMode = false;
-let followEnabled = true;
 
 btnMode.addEventListener("click", () => {
     manualMode = !manualMode;
     btnMode.textContent = manualMode ? "GPSモードに切替" : "手動モードに切替";
     manualControls.classList.toggle("visible", manualMode);
     if (manualMode) updatePositionFromManual();
-});
-
-btnFollow.addEventListener("click", () => {
-    followEnabled = !followEnabled;
-    btnFollow.textContent = "カメラ追従: " + (followEnabled ? "ON" : "OFF");
-    btnFollow.classList.toggle("active", followEnabled);
 });
 
 sxInput.addEventListener("input", updatePositionFromManual);
@@ -472,84 +438,65 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
 directionalLight.position.set(100, 200, 100);
 scene.add(directionalLight);
 
-let traceLine = null;
-let traceMaterial = new THREE.LineBasicMaterial({ color: 0xff3b3b });
-const tracePoints = [];
+
+//==========================================================
+// 軌跡(固定バッファを使い回す。ジオメトリの作り直しはしない)
+//==========================================================
+
+const traceMaterial = new THREE.LineBasicMaterial({ color: 0xff3b3b });
+const MAX_TRACE_POINTS = 5000;
+const tracePositions = new Float32Array(MAX_TRACE_POINTS * 3);
+let traceCount = 0;
+let lastTracePoint = null;
+
+const traceGeometry = new THREE.BufferGeometry();
+traceGeometry.setAttribute("position", new THREE.BufferAttribute(tracePositions, 3));
+traceGeometry.setDrawRange(0, 0);
+
+const traceLine = new THREE.Line(traceGeometry, traceMaterial);
+traceLine.frustumCulled = false;
+scene.add(traceLine);
 
 function addTracePoint(point) {
-    tracePoints.push(point.clone());
+    // 0.3m未満しか動いていなければ追加しない
+    if (lastTracePoint && lastTracePoint.distanceToSquared(point) < 0.09) return;
 
-    if (traceLine) {
-        scene.remove(traceLine);
-        traceLine.geometry.dispose();
+    if (traceCount >= MAX_TRACE_POINTS) {
+        tracePositions.copyWithin(0, 3);
+        traceCount--;
     }
+    tracePositions[traceCount * 3]     = point.x;
+    tracePositions[traceCount * 3 + 1] = point.y;
+    tracePositions[traceCount * 3 + 2] = point.z;
+    traceCount++;
 
-    const geometry = new THREE.BufferGeometry().setFromPoints(tracePoints);
-    traceLine = new THREE.Line(geometry, traceMaterial);
-    scene.add(traceLine);
+    traceGeometry.setDrawRange(0, traceCount);
+    traceGeometry.attributes.position.needsUpdate = true;
+
+    if (!lastTracePoint) lastTracePoint = new THREE.Vector3();
+    lastTracePoint.copy(point);
 }
 
 
 //==========================================================
-// ルートノード / peer(隣接)関係の表示専用レイヤー
-//   ・検索窓で選んだ施設への経路探索(ダイクストラ法)
-//   ・現在地が地図範囲外(地形との交点なし)の場合は、
-//     XZ平面のユークリッド距離だけで最寄りノードを始点にする
-//   ・移動のたびに0.5秒毎に始点ノードから再計算し、
-//     ルート逸脱時の復帰と、歩き終えた区間の消去を行う
+// ルートノード / peer(隣接)関係のデータ管理
 //==========================================================
 
-const ROUTE_API_URL = "https://192.168.137.1:3333/routes/route_editor3D";
-const PLACES_API_URL = "https://192.168.137.1:3333/routes/places";
-const PLACE_NODE_API_URL = "https://192.168.137.1:3333/routes/place_node";
-
-const routeNodesGroup = new THREE.Group();
-const routeLinksGroup = new THREE.Group();
-scene.add(routeNodesGroup);
-scene.add(routeLinksGroup);
-
-const ROUTE_NODE_MAT = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
-const ROUTE_LINK_MAT = new THREE.MeshBasicMaterial({ color: 0x3b7ddd });
-const ROUTE_NODE_RADIUS = 0.5;
-const ROUTE_LINK_RADIUS = 0.15;
-
-const PATH_START_MAT = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
-const PATH_END_MAT = new THREE.MeshBasicMaterial({ color: 0xff2d55 });
-const PATH_NODE_MAT = new THREE.MeshBasicMaterial({ color: 0xffcc00 });
-const PATH_LINK_MAT = new THREE.MeshBasicMaterial({ color: 0xffcc00 });
-const PATH_LINK_RADIUS_SCALE = 2.4;
-
-const nodeMeshMap = new Map();
-const linkMeshMap = new Map();
+const ROUTE_API_URL = "https://192.168.1.100:3333/routes/route_editor3D";
+const PLACES_API_URL = "https://192.168.1.100:3333/routes/places";
+const PLACE_NODE_API_URL = "https://192.168.1.100:3333/routes/place_node";
 
 const nodePositions = new Map();
-
 const adjacency = new Map();
 
 let placesList = [];
 
-// 施設名を比較する際の正規化(前後の空白を除去)。
-// 同じ施設が複数のplace_idで登録されているケースをまとめるために使う。
+// 経路の再計算を省くためのキャッシュ
+let lastRouteStartId = null;
+let lastRoutePlaceId = null;
+
 function normalizePlaceName(name) {
     return (name || "").trim();
-}
-
-function pairKey(a, b) {
-    return a < b ? `${a}|${b}` : `${b}|${a}`;
-}
-
-function createRouteLinkMesh(posA, posB) {
-    const mesh = new THREE.Mesh(
-        new THREE.CylinderGeometry(ROUTE_LINK_RADIUS, ROUTE_LINK_RADIUS, 1, 8),
-        ROUTE_LINK_MAT
-    );
-    const mid = posA.clone().add(posB).multiplyScalar(0.5);
-    const dir = posB.clone().sub(posA);
-    const len = dir.length();
-    mesh.position.copy(mid);
-    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
-    mesh.scale.set(1, len, 1);
-    return mesh;
 }
 
 async function loadRouteNodes() {
@@ -559,12 +506,10 @@ async function loadRouteNodes() {
         const data = await res.json();
         const nodeList = data.nodes || [];
 
-        routeNodesGroup.clear();
-        routeLinksGroup.clear();
-        nodeMeshMap.clear();
-        linkMeshMap.clear();
         adjacency.clear();
         nodePositions.clear();
+        lastRouteStartId = null;
+        clearRoutePath();
         routeInfo.textContent = "";
         routeInfo.classList.remove("visible");
 
@@ -572,17 +517,8 @@ async function loadRouteNodes() {
             const pos = new THREE.Vector3(Number(n.x), Number(n.y), Number(n.z));
             nodePositions.set(n.id, pos);
             adjacency.set(n.id, []);
-
-            const mesh = new THREE.Mesh(
-                new THREE.SphereGeometry(ROUTE_NODE_RADIUS, 16, 16),
-                ROUTE_NODE_MAT
-            );
-            mesh.position.copy(pos);
-            routeNodesGroup.add(mesh);
-            nodeMeshMap.set(n.id, mesh);
         });
 
-        const drawnKeys = new Set();
         nodeList.forEach(n => {
             (n.peers || []).forEach(peerRaw => {
                 const peerId = (typeof peerRaw === "string") ? peerRaw : peerRaw.id;
@@ -600,18 +536,10 @@ async function loadRouteNodes() {
                 if (adjacency.has(peerId) && !adjacency.get(peerId).some(e => e.id === n.id)) {
                     adjacency.get(peerId).push({ id: n.id, dist: distance });
                 }
-
-                const key = pairKey(n.id, peerId);
-                if (drawnKeys.has(key)) return;
-                drawnKeys.add(key);
-
-                const mesh = createRouteLinkMesh(nodePositions.get(n.id), nodePositions.get(peerId));
-                routeLinksGroup.add(mesh);
-                linkMeshMap.set(key, { mesh, baseLen: mesh.scale.y });
             });
         });
 
-        console.log(`ルート表示: ノード${nodeList.length}件 / リンク${drawnKeys.size}件`);
+        console.log(`ルートデータ読み込み: ノード${nodeList.length}件(非表示・探索用データのみ)`);
     } catch (e) {
         console.error("ルートノードの読み込みに失敗しました:", e);
         routeInfo.textContent = "エラー: ノードデータの取得に失敗しました";
@@ -628,28 +556,24 @@ async function loadPlacesAndLinks() {
         const rawPlaces = placesRes.ok ? await placesRes.json() : [];
         const links = linksRes.ok ? await linksRes.json() : [];
 
-        // 生の紐づけ(place_id -> ノードIDの集合)
         const rawPlaceNodeMap = new Map();
         links.forEach(l => {
             if (!rawPlaceNodeMap.has(l.place_id)) rawPlaceNodeMap.set(l.place_id, new Set());
             rawPlaceNodeMap.get(l.place_id).add(l.node_id);
         });
 
-        // 同じ施設名を持つ複数のplace_idを1つの施設としてまとめる。
-        // (例:「〇〇会館」の西口ノードと北口ノードがそれぞれ別のplace_idに
-        //  紐づいていても、検索窓では1件の施設として表示し、
-        //  経路計算では統合したノード集合の中から最短のものを目的地にする)
-        const groupMap = new Map(); // 正規化した施設名 -> 統合された施設オブジェクト
+        // 同じ施設名を持つ複数のplace_idを1つの施設としてまとめる
+        const groupMap = new Map();
 
         rawPlaces.forEach(p => {
             const key = normalizePlaceName(p.name);
 
             if (!groupMap.has(key)) {
                 groupMap.set(key, {
-                    id: p.id,              // 代表となる最初のplace_id(検索一覧のキーとして使用)
+                    id: p.id,
                     name: p.name,
-                    placeIds: new Set(),   // このグループに含まれる全place_id
-                    nodeIds: new Set()      // このグループに紐づく全ノードID
+                    placeIds: new Set(),
+                    nodeIds: new Set()
                 });
             }
 
@@ -666,7 +590,6 @@ async function loadPlacesAndLinks() {
             `施設データ読み込み: 施設(生データ)${rawPlaces.length}件 → 統合後${placesList.length}件 / 紐づけ${links.length}件`
         );
 
-        // 検索窓が既に開かれていた場合に備えて候補一覧を更新
         if (searchResults.classList.contains("visible")) {
             renderSearchResults(searchInput.value);
         }
@@ -677,42 +600,60 @@ async function loadPlacesAndLinks() {
 
 
 //==========================================================
-// 最短経路探索(ダイクストラ法)
+// 最短経路探索(ダイクストラ法・ヒープ版)
 //==========================================================
 
 function dijkstraAll(startId) {
     const dist = new Map();
     const prev = new Map();
-    const visited = new Set();
-
     if (!adjacency.has(startId)) return { dist, prev };
 
     for (const id of adjacency.keys()) dist.set(id, Infinity);
     dist.set(startId, 0);
 
-    while (true) {
-        let currentId = null;
-        let currentDist = Infinity;
-        for (const [id, d] of dist) {
-            if (!visited.has(id) && d < currentDist) {
-                currentDist = d;
-                currentId = id;
+    // 最小ヒープ [距離, id]
+    const heap = [[0, startId]];
+    const push = (item) => {
+        heap.push(item);
+        let i = heap.length - 1;
+        while (i > 0) {
+            const p = (i - 1) >> 1;
+            if (heap[p][0] <= heap[i][0]) break;
+            [heap[p], heap[i]] = [heap[i], heap[p]];
+            i = p;
+        }
+    };
+    const pop = () => {
+        const top = heap[0];
+        const last = heap.pop();
+        if (heap.length) {
+            heap[0] = last;
+            let i = 0;
+            while (true) {
+                const l = i * 2 + 1, r = l + 1;
+                let m = i;
+                if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+                if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+                if (m === i) break;
+                [heap[m], heap[i]] = [heap[i], heap[m]];
+                i = m;
             }
         }
+        return top;
+    };
 
-        if (currentId === null) break;
-        visited.add(currentId);
-
-        for (const edge of adjacency.get(currentId) || []) {
-            if (visited.has(edge.id)) continue;
-            const newDist = currentDist + edge.dist;
-            if (newDist < dist.get(edge.id)) {
-                dist.set(edge.id, newDist);
-                prev.set(edge.id, currentId);
+    while (heap.length) {
+        const [d, id] = pop();
+        if (d > dist.get(id)) continue;
+        for (const edge of adjacency.get(id) || []) {
+            const nd = d + edge.dist;
+            if (nd < dist.get(edge.id)) {
+                dist.set(edge.id, nd);
+                prev.set(edge.id, id);
+                push([nd, edge.id]);
             }
         }
     }
-
     return { dist, prev };
 }
 
@@ -729,7 +670,6 @@ function buildPath(prev, startId, endId) {
     return path;
 }
 
-// 指定したワールド座標(3D)に一番近いルートノードのIDを返す(地形内にいる場合用)。
 function findNearestNode(worldPos) {
     let bestId = null;
     let bestDist = Infinity;
@@ -743,8 +683,6 @@ function findNearestNode(worldPos) {
     return bestId;
 }
 
-// 指定したワールドX, Zに対して、Y軸を無視してXZ平面上で一番近いルートノードのIDを返す。
-// 現在地が地形の範囲外(交点なし)のときのフォールバックとして使う。
 function findNearestNodeXZ(x, z) {
     let bestId = null;
     let bestDist = Infinity;
@@ -760,34 +698,89 @@ function findNearestNodeXZ(x, z) {
     return bestId;
 }
 
-function resetRouteAppearance() {
-    nodeMeshMap.forEach(mesh => {
-        mesh.material = ROUTE_NODE_MAT;
-    });
-    linkMeshMap.forEach(entry => {
-        entry.mesh.material = ROUTE_LINK_MAT;
-        entry.mesh.scale.set(1, entry.baseLen, 1);
-    });
+
+//==========================================================
+// 経路の見た目(板ポリゴンのリボン)
+//==========================================================
+
+const ROUTE_PATH_WIDTH = 1.4;
+const ROUTE_PATH_HEIGHT_OFFSET = 0.08;
+
+const ROUTE_PATH_MAT = new THREE.MeshBasicMaterial({
+    color: 0xffcc00,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.85,
+    depthWrite: false
+});
+
+const routePathGroup = new THREE.Group();
+routePathGroup.renderOrder = 10;
+scene.add(routePathGroup);
+
+function clearRoutePath() {
+    while (routePathGroup.children.length) {
+        const child = routePathGroup.children.pop();
+        child.geometry.dispose();
+        routePathGroup.remove(child);
+    }
 }
 
-function highlightPath(pathIds) {
-    resetRouteAppearance();
+function createSegmentQuad(posA, posB, width) {
+    const dir = new THREE.Vector3().subVectors(posB, posA);
+    dir.y = 0;
+    const length = dir.length();
+    if (length < 1e-6) return null;
+    dir.normalize();
 
-    pathIds.forEach((id, i) => {
-        const mesh = nodeMeshMap.get(id);
-        if (!mesh) return;
-        if (i === 0) mesh.material = PATH_START_MAT;
-        else if (i === pathIds.length - 1) mesh.material = PATH_END_MAT;
-        else mesh.material = PATH_NODE_MAT;
-    });
+    const perp = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(width / 2);
+
+    const p1 = new THREE.Vector3(posA.x + perp.x, posA.y + ROUTE_PATH_HEIGHT_OFFSET, posA.z + perp.z);
+    const p2 = new THREE.Vector3(posA.x - perp.x, posA.y + ROUTE_PATH_HEIGHT_OFFSET, posA.z - perp.z);
+    const p3 = new THREE.Vector3(posB.x - perp.x, posB.y + ROUTE_PATH_HEIGHT_OFFSET, posB.z - perp.z);
+    const p4 = new THREE.Vector3(posB.x + perp.x, posB.y + ROUTE_PATH_HEIGHT_OFFSET, posB.z + perp.z);
+
+    const geometry = new THREE.BufferGeometry();
+    const vertices = new Float32Array([
+        p1.x, p1.y, p1.z,
+        p2.x, p2.y, p2.z,
+        p3.x, p3.y, p3.z,
+
+        p1.x, p1.y, p1.z,
+        p3.x, p3.y, p3.z,
+        p4.x, p4.y, p4.z
+    ]);
+    geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+    geometry.computeVertexNormals();
+
+    return new THREE.Mesh(geometry, ROUTE_PATH_MAT);
+}
+
+function createJointDisc(pos, radius) {
+    const geometry = new THREE.CircleGeometry(radius, 16);
+    geometry.rotateX(-Math.PI / 2);
+    const mesh = new THREE.Mesh(geometry, ROUTE_PATH_MAT);
+    mesh.position.set(pos.x, pos.y + ROUTE_PATH_HEIGHT_OFFSET, pos.z);
+    return mesh;
+}
+
+function buildRoutePathRibbon(pathIds) {
+    clearRoutePath();
+    if (!pathIds || pathIds.length < 2) return;
 
     for (let i = 0; i < pathIds.length - 1; i++) {
-        const key = pairKey(pathIds[i], pathIds[i + 1]);
-        const entry = linkMeshMap.get(key);
-        if (!entry) continue;
-        entry.mesh.material = PATH_LINK_MAT;
-        entry.mesh.scale.set(PATH_LINK_RADIUS_SCALE, entry.baseLen, PATH_LINK_RADIUS_SCALE);
+        const posA = nodePositions.get(pathIds[i]);
+        const posB = nodePositions.get(pathIds[i + 1]);
+        if (!posA || !posB) continue;
+
+        const quad = createSegmentQuad(posA, posB, ROUTE_PATH_WIDTH);
+        if (quad) routePathGroup.add(quad);
+
+        routePathGroup.add(createJointDisc(posA, ROUTE_PATH_WIDTH / 2));
     }
+
+    const lastPos = nodePositions.get(pathIds[pathIds.length - 1]);
+    if (lastPos) routePathGroup.add(createJointDisc(lastPos, ROUTE_PATH_WIDTH / 2));
 }
 
 
@@ -832,7 +825,6 @@ function renderSearchResults(query) {
             div.classList.add("selected");
         }
         div.textContent = place.name;
-        // タップ/クリックで、その施設を目的地として経路を組む
         div.addEventListener("click", () => selectDestination(place));
         searchResults.appendChild(div);
     });
@@ -861,12 +853,13 @@ document.addEventListener("click", (e) => {
 
 function selectDestination(place) {
     selectedPlace = place;
+    lastRouteStartId = null;   // キャッシュ無効化
+    lastRoutePlaceId = null;
     searchInput.value = place.name;
     closeSearchResults();
 
     btnRoute.disabled = false;
 
-    // 選んだ瞬間に一度経路を計算し、その後は移動のたびに再計算する
     computeRouteToSelectedPlace();
 
     if (routeRecalcTimer) clearInterval(routeRecalcTimer);
@@ -875,13 +868,15 @@ function selectDestination(place) {
 
 function clearDestination() {
     selectedPlace = null;
+    lastRouteStartId = null;
+    lastRoutePlaceId = null;
 
     if (routeRecalcTimer) {
         clearInterval(routeRecalcTimer);
         routeRecalcTimer = null;
     }
 
-    resetRouteAppearance();
+    clearRoutePath();
     routeInfo.textContent = "";
     routeInfo.classList.remove("visible");
     searchInput.value = "";
@@ -894,9 +889,6 @@ btnRoute.addEventListener("click", () => {
 
 //==========================================================
 // 選択中の施設への経路計算
-//   ・現在地から最寄りのノードを始点として毎回計算し直す
-//   ・これにより「ルートから外れた場合の復帰」と
-//     「歩き終えた区間が消えていく」動きの両方を実現する
 //==========================================================
 
 function computeRouteToSelectedPlace() {
@@ -915,8 +907,7 @@ function computeRouteToSelectedPlace() {
         return;
     }
 
-    // 地形内(交点あり)なら3D座標で、範囲外(交点なし)ならXZ平面だけで最寄りノードを探す
-    const startId = hasIntersection
+    const startId = (hasIntersection && !pointerIsFixedHeight)
         ? findNearestNode(intersectionPoint)
         : findNearestNodeXZ(currentWorldX, currentWorldZ);
 
@@ -926,10 +917,13 @@ function computeRouteToSelectedPlace() {
         return;
     }
 
+    // 始点ノードも目的地も変わっていなければ再計算しない
+    if (startId === lastRouteStartId && selectedPlace.id === lastRoutePlaceId) return;
+    lastRouteStartId = startId;
+    lastRoutePlaceId = selectedPlace.id;
+
     const { dist, prev } = dijkstraAll(startId);
 
-    // selectedPlaceは同名の複数place_idを統合したオブジェクトなので、
-    // 紐づく全ノード(西口・北口など)の中から最短のものを自動的に選ぶ
     const nodeIds = selectedPlace.nodeIds;
     if (!nodeIds || !nodeIds.size) {
         routeInfo.textContent = `「${selectedPlace.name}」に紐づくノードがありません`;
@@ -960,12 +954,9 @@ function computeRouteToSelectedPlace() {
         return;
     }
 
-    highlightPath(path);
-
-    const startNote = hasIntersection ? "" : "(現在地は地図範囲外のため、直線距離で最寄りノードを推定)\n";
+    buildRoutePathRibbon(path);
 
     routeInfo.textContent =
-        startNote +
         `目的地施設 : ${selectedPlace.name}\n` +
         `始点ノード : ${startId}\n` +
         `終点ノード : ${bestEndId}\n` +
@@ -975,7 +966,10 @@ function computeRouteToSelectedPlace() {
 }
 
 
-// Raycaster (上から地形へ向けて撃つ)
+//==========================================================
+// Raycaster / 地形
+//==========================================================
+
 const raycaster = new THREE.Raycaster();
 const rayDirection = new THREE.Vector3(0, -1, 0);
 const rayOrigin = new THREE.Vector3();
@@ -986,87 +980,130 @@ let terrain = null;
 let hasIntersection = false;
 let rayStartHeight = 1000;
 
-// 地形との交点の有無に関わらず、直近のワールドXZ座標を保持しておく
-// (地図範囲外にいる場合の最寄りノード探索に使う)
+let terrainBox = null;               // 地形のワールド座標での範囲
+const TERRAIN_MARGIN = 0.5;          // 端からの余白
+const CLAMP_TO_TERRAIN = false;      // true: 地形の範囲内に収める / false: 実際の位置のまま表示
+const FIXED_HEIGHT_Y = null;         // 交点がないときのポインタの高さ。null なら地形の最下部+1
+let pointerIsFixedHeight = false;    // 直近の位置が固定高さかどうか
+
 let currentWorldX = null;
 let currentWorldZ = null;
 let hasWorldPosition = false;
 
 let currentMarkerPos = null;
-let markerAnimId = null;
-
 
 function moveMarkerSmooth(targetPos) {
+    // 補間なし。取得した位置をそのまま反映する
+    if (!currentMarkerPos) currentMarkerPos = new THREE.Vector3();
+    currentMarkerPos.copy(targetPos);
+}
 
-    if (!currentMarkerPos) {
-        currentMarkerPos = targetPos.clone();
-        return;
-    }
 
-    const startPos = currentMarkerPos.clone();
+let locateAnimId = null;
+
+function goToCurrentLocation() {
+    if (!currentMarkerPos) return;
+
+    const startTarget = controls.target.clone();
+    const startCamPos = camera.position.clone();
+    const endTarget = currentMarkerPos.clone();
+    const endCamPos = endTarget.clone().add(offset);
+
     const startTime = performance.now();
-    const duration = 500;
+    const duration = 600;
 
-    if (markerAnimId) {
-        cancelAnimationFrame(markerAnimId);
-        markerAnimId = null;
+    if (locateAnimId) {
+        cancelAnimationFrame(locateAnimId);
+        locateAnimId = null;
     }
 
     function step(time) {
         let progress = (time - startTime) / duration;
         if (progress > 1) progress = 1;
 
-        currentMarkerPos.lerpVectors(startPos, targetPos, progress);
-
-        if (followEnabled) {
-            controls.target.copy(currentMarkerPos);
-            camera.position.copy(currentMarkerPos).add(offset);
-            controls.update();
-        }
+        controls.target.lerpVectors(startTarget, endTarget, progress);
+        camera.position.lerpVectors(startCamPos, endCamPos, progress);
+        controls.update();
 
         if (progress < 1) {
-            markerAnimId = requestAnimationFrame(step);
+            locateAnimId = requestAnimationFrame(step);
         } else {
-            markerAnimId = null;
+            locateAnimId = null;
         }
     }
 
-    markerAnimId = requestAnimationFrame(step);
+    locateAnimId = requestAnimationFrame(step);
 }
 
+btnLocate.addEventListener("click", goToCurrentLocation);
 
-// 指定したワールドX, Zに対して地形に光線を当て、交点(高さ含む)を求めて
-// マーカー・軌跡・カメラ追従・情報表示を更新する
+
+// 真上からレイを撃って地形との交点を返す(なければnull)
+// 同じ場所(0.5mメッシュ)の結果はキャッシュして、重いレイキャストを省く
+const heightCache = new Map();
+const HEIGHT_CELL = 0.5;
+
+function castDown(x, z) {
+    const key = Math.round(x / HEIGHT_CELL) + "," + Math.round(z / HEIGHT_CELL);
+
+    if (heightCache.has(key)) {
+        const cachedY = heightCache.get(key);
+        return cachedY === null ? null : new THREE.Vector3(x, cachedY, z);
+    }
+
+    rayOrigin.set(x, rayStartHeight, z);
+    raycaster.set(rayOrigin, rayDirection);
+    const hits = raycaster.intersectObject(terrain, true);
+
+    const y = hits.length ? hits[0].point.y : null;
+    heightCache.set(key, y);
+    return y === null ? null : new THREE.Vector3(x, y, z);
+}
+
+// 指定したワールドX, Zを地形上の位置に変換して、マーカー・軌跡・情報表示を更新する。
 function updatePositionFromWorldXZ(x, z, extraInfoLines) {
 
     if (!terrain) return;
 
-    // 交点の有無に関わらず、直近のXZ座標として常に保存しておく
+    const notes = [];
+
+    if (CLAMP_TO_TERRAIN && terrainBox) {
+        const cx = Math.min(Math.max(x, terrainBox.min.x + TERRAIN_MARGIN), terrainBox.max.x - TERRAIN_MARGIN);
+        const cz = Math.min(Math.max(z, terrainBox.min.z + TERRAIN_MARGIN), terrainBox.max.z - TERRAIN_MARGIN);
+        if (cx !== x || cz !== z) {
+            notes.push("※地図範囲外のため端に補正");
+            x = cx;
+            z = cz;
+        }
+    }
+
+    // 真上からレイを撃つ。当たらなければ固定の高さでポインタを出す。
+    let point = castDown(x, z);
+    pointerIsFixedHeight = false;
+
+    if (!point) {
+        let y = FIXED_HEIGHT_Y;
+        if (y === null) {
+            y = terrainBox ? terrainBox.min.y + 1 : 0;
+        }
+        point = new THREE.Vector3(x, y, z);
+        pointerIsFixedHeight = true;
+        notes.push("※交点なし:固定の高さで表示");
+    }
+
     currentWorldX = x;
     currentWorldZ = z;
     hasWorldPosition = true;
 
-    rayOrigin.set(x, rayStartHeight, z);
-    raycaster.set(rayOrigin, rayDirection);
-
-    const hits = raycaster.intersectObject(terrain, true);
-
-    if (!hits.length) {
-        hasIntersection = false;
-        marker.style.display = "none";
-        info.textContent = (extraInfoLines || []).concat(["交点なし(地形の外)"]).join("\n");
-        return;
-    }
-
     hasIntersection = true;
-    intersectionPoint.copy(hits[0].point);
+    intersectionPoint.copy(point);
 
     marker.style.display = "block";
 
     moveMarkerSmooth(intersectionPoint);
     addTracePoint(intersectionPoint);
 
-    const lines = (extraInfoLines || []).concat([
+    const lines = (extraInfoLines || []).concat(notes).concat([
         `X : ${intersectionPoint.x.toFixed(2)}`,
         `Y : ${intersectionPoint.y.toFixed(2)}`,
         `Z : ${intersectionPoint.z.toFixed(2)}`
@@ -1084,9 +1121,9 @@ function updatePositionFromManual() {
 
 
 function updateMarkerScreenPosition() {
-    if (!hasIntersection) return;
+    if (!hasIntersection || !currentMarkerPos) return;
 
-    screenPosition.copy(intersectionPoint);
+    screenPosition.copy(currentMarkerPos);
     screenPosition.project(camera);
 
     const x = (screenPosition.x * 0.5 + 0.5) * innerWidth;
@@ -1104,7 +1141,7 @@ function updateMarkerScreenPosition() {
 const loader = new GLTFLoader();
 
 loader.load(
-    "gakkou_zahyou03-軽量化.glb",
+    "gakkou_zahyou03-軽量化2.glb",
 
     gltf => {
 
@@ -1115,6 +1152,7 @@ loader.load(
         const center = box.getCenter(new THREE.Vector3());
         terrain.position.sub(center);
         terrain.updateMatrixWorld(true);
+        terrainBox = new THREE.Box3().setFromObject(terrain);
 
         referenceReady = setupReferencePoints(terrain);
 
@@ -1131,8 +1169,9 @@ loader.load(
 
         loading.remove();
 
-        if (referenceReady) {
-            startGPS();
+        // GLBより先にGPSが取れていた場合は、ここで地形上へ反映する
+        if (referenceReady && lastGPSFix) {
+            updateGPS(lastGPSFix.lat, lastGPSFix.lon, lastGPSFix.accuracy);
         }
 
         loadRouteNodes();
@@ -1146,74 +1185,90 @@ loader.load(
 
     error => {
         console.error("GLB Load Error:", error);
-        loading.textContent = "GLB Load Error";
+        loading.textContent = "GLBロード失敗（GPSは別途測位中）";
+        info.textContent = "地図データ(GLB)の読み込みに失敗しました。ファイル名・配置・通信状態を確認してください。\nGPS測位は継続しています。";
     }
 );
 
 
 //==========================================================
 // GPS
+//   ・gps.html と同じ方式: watchPosition のコールバック内で
+//     緯度経度を即座に左上の枠へ表示(加工なし)
+//   ・重い3D側の反映は requestAnimationFrame で
+//     「1フレームにつき最新値1回」にまとめる
 //==========================================================
 
-function updateGPS(lat, lon, accuracy) {
+let gpsWatchId = null;
+let lastGPSFix = null;      // 最新の測位結果 {lat, lon, accuracy}
+let lastGPSTime = null;
+let lastProcessMs = 0;
+let mapUpdatePending = false;
 
-    const smoothed = smoothGPS(lat, lon);
-    const pos = gpsToWorld(smoothed.lat, smoothed.lon);
-
-    const extraLines = [
-        `緯度 : ${smoothed.lat.toFixed(8)}`,
-        `経度 : ${smoothed.lon.toFixed(8)}`,
-        accuracy !== undefined ? `精度 : ${accuracy.toFixed(1)} m` : null
-    ].filter(Boolean);
-
-    updatePositionFromWorldXZ(pos.x, pos.z, extraLines);
+function scheduleMapUpdate() {
+    if (mapUpdatePending) return;
+    mapUpdatePending = true;
+    requestAnimationFrame(() => {
+        mapUpdatePending = false;
+        if (!manualMode && lastGPSFix) {
+            const t0 = performance.now();
+            updateGPS(lastGPSFix.lat, lastGPSFix.lon, lastGPSFix.accuracy);
+            lastProcessMs = performance.now() - t0;
+        }
+    });
 }
 
-
 function startGPS() {
-
     if (!navigator.geolocation) {
-        info.textContent = "GPS非対応です";
+        info.textContent = "この環境では位置情報APIを利用できません。" +
+            (window.isSecureContext ? "" : "\nHTTPSまたはlocalhostで開いてください。");
+        return;
+    }
+    if (gpsWatchId !== null) {
+        navigator.geolocation.clearWatch(gpsWatchId);
+    }
+
+    gpsWatchId = navigator.geolocation.watchPosition(p => {
+        // gps.html と同じ: 取得したらすぐ表示
+        latEl.textContent = p.coords.latitude;
+        lonEl.textContent = p.coords.longitude;
+
+        lastGPSFix = {
+            lat: p.coords.latitude,
+            lon: p.coords.longitude,
+            accuracy: p.coords.accuracy
+        };
+        lastGPSTime = new Date();
+
+        scheduleMapUpdate();
+    }, null, {
+        enableHighAccuracy: true
+    });
+}
+
+function updateGPS(lat, lon, accuracy) {
+    if (!referenceReady) {
+        info.textContent = "GPS取得成功（地図への変換待ち）";
         return;
     }
 
-    let firstFixDone = false;
+    const pos = gpsToWorld(lat, lon);
+    if (!Number.isFinite(pos.x) || !Number.isFinite(pos.z)) return;
 
-    navigator.geolocation.getCurrentPosition(
-        position => {
-            if (firstFixDone || manualMode) return;
-
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
-
-            filteredLat = lat;
-            filteredLon = lon;
-
-            updateGPS(lat, lon, position.coords.accuracy);
-        },
-        () => {},
-        { enableHighAccuracy: false, maximumAge: 60000, timeout: 3000 }
-    );
-
-    navigator.geolocation.watchPosition(
-        position => {
-            firstFixDone = true;
-            if (manualMode) return;
-
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
-            const accuracy = position.coords.accuracy;
-
-            if (accuracy > 15) return;
-
-            updateGPS(lat, lon, accuracy);
-        },
-        error => {
-            if (!manualMode) info.textContent = "GPSエラー : " + error.message;
-        },
-        { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
-    );
+    updatePositionFromWorldXZ(pos.x, pos.z, [
+        Number.isFinite(accuracy) ? `精度 : ${accuracy.toFixed(1)} m` : null,
+        lastGPSTime ? `取得 : ${lastGPSTime.toLocaleTimeString()}` : null,
+        `処理 : ${lastProcessMs.toFixed(1)} ms`
+    ].filter(Boolean));
 }
+
+btnGPSRetry.addEventListener("click", startGPS);
+
+startGPS();
+
+window.addEventListener("pagehide", () => {
+    if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
+});
 
 
 //==========================================================

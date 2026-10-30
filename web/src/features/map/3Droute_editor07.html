@@ -52,7 +52,11 @@ button.active{background:#3b7ddd;color:#fff;border-color:#3b7ddd}
 .place-popup-loading{padding:6px; color:#aaa;}
 </style>
 <script type="importmap">
-{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js"}}
+{
+    "imports": {
+        "three": "./three/three.module.js"
+    }
+}
 </script>
 </head>
 <body>
@@ -80,16 +84,22 @@ button.active{background:#3b7ddd;color:#fff;border-color:#3b7ddd}
 
 <script type="module">
 import * as THREE from "three";
-import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/controls/OrbitControls.js";
-import { TransformControls } from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/controls/TransformControls.js";
-import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js";
+
+import { OrbitControls } from
+    "./three/examples/jsm/controls/OrbitControls.js";
+
+import { TransformControls } from
+    "./three/examples/jsm/controls/TransformControls.js";
+
+import { GLTFLoader } from
+    "./three/examples/jsm/loaders/GLTFLoader.js";
 
 const $ = id => document.getElementById(id);
 const statusEl = $("status");
 const setStatus = s => statusEl.textContent = s;
 
 // APIサーバのベースURL(route_editor3D保存/読込と同じサーバを想定)
-const API_BASE = "https://192.168.137.1:3333";
+const API_BASE = "https://192.168.1.100:3333";
 
 // ---------- Three.js 基本セットアップ ----------
 const scene = new THREE.Scene();
@@ -145,7 +155,7 @@ scene.add(dLight);
 
 // ---------- 地形(terrain) ----------
 let terrain = null;
-new GLTFLoader().load("gakkou_zahyou03-軽量化.glb", gltf => {
+new GLTFLoader().load("gakkou_zahyou03-軽量化2.glb", gltf => {
   terrain = gltf.scene;
   scene.add(terrain);
   const box = new THREE.Box3().setFromObject(terrain);

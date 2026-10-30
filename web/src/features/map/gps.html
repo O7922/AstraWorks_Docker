@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="ja">
+<meta charset="UTF-8">
+<title>GPS</title>
+
+緯度: <span id="lat">---</span><br>
+経度: <span id="lon">---</span>
+
+<script>
+navigator.geolocation.watchPosition(p => {
+  document.getElementById("lat").textContent = p.coords.latitude;
+  document.getElementById("lon").textContent = p.coords.longitude;
+}, null, {
+  enableHighAccuracy: true
+});
+</script>
+
+</html>

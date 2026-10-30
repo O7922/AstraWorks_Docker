@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GPS 3D Position Viewer</title>
+
+<style>
+html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #111;
+    font-family: sans-serif;
+}
+
+#ui {
+    position: absolute;
+    left: 10px;
+    top: 10px;
+    z-index: 100;
+    color: #fff;
+    background: rgba(0, 0, 0, .65);
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.6;
+    max-width: 300px;
+}
+
+#ui #info {
+    white-space: pre-line;
+}
+
+#ui .row {
+    margin-top: 8px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+#ui button {
+    background: #333;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+#ui button.active {
+    background: #2b6cb0;
+    border-color: #4a90d9;
+}
+
+#ui button:active {
+    background: #555;
+}
+
+#ui button#btnRoute {
+    background: #7a4a00;
+    border-color: #ffb300;
+}
+
+#ui button#btnRoute:active {
+    background: #a56400;
+}
+
+#manualControls {
+    margin-top: 8px;
+    display: none;
+}
+
+#manualControls.visible {
+    display: block;
+}
+
+#manualControls input {
+    width: 100%;
+}
+
+#routeInfo {
+    margin-top: 8px;
+    white-space: pre-line;
+    font-size: 12px;
+    color: #ffd54a;
+    border-top: 1px solid #444;
+    padding-top: 6px;
+    display: none;
+}
+
+#routeInfo.visible {
+    display: block;
+}
+
+#marker {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #ff3b3b;
+    border: 2px solid white;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 99;
+    box-shadow: 0 0 8px black;
+    display: none;
+}
+
+#loading {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 20px;
+    z-index: 200;
+}
+</style>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js"
+    }
+}
+</script>
+</head>
+
+<body>
+
+<div id="loading">Loading GLB...</div>
+
+<div id="ui">
+    <div id="info">GPS待機中</div>
+
+    <div class="row">
+        <button id="btnMode">手動モードに切替</button>
+        <button id="btnFollow" class="active">カメラ追従: ON</button>
+    </div>
+
+    <div class="row">
+        <button id="btnRoute">道案内</button>
+    </div>
+
+    <div id="manualControls">
+        <div>X<br><input id="sx" type="range" min="-100" max="100" step="0.1" value="0"></div>
+        <div>Z<br><input id="sz" type="range" min="-100" max="100" step="0.1" value="0"></div>
+    </div>
+
+    <div id="routeInfo"></div>
+</div>
+
+<div id="marker"></div>
+
+<script type="module">
+
+import * as THREE from "three";
+import { OrbitControls } from
+    "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/controls/OrbitControls.js";
+import { GLTFLoader } from
+    "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js";
+
+
+//==========================================================
+// GLB内オブジェクトのカスタムプロパティ(緯度経度)を探すためのキー候補
+// Blenderで付けたカスタムプロパティの名前がこれと違う場合は
+// ここに実際のキー名を追加してください。
+//==========================================================
+
+// LeftTop / RightBottom それぞれで実際に使われているキー名を先頭に、
+// 念のため他の一般的な名前も候補として残してあります。
+const LEFTTOP_LAT_KEYS = ["GPS_LeftTopLat", "lat", "Lat", "LAT", "latitude", "Latitude"];
+const LEFTTOP_LON_KEYS = ["GPS_LeftTopLon", "lon", "Lon", "LON", "lng", "longitude", "Longitude"];
+const RIGHTBOTTOM_LAT_KEYS = ["GPS_RightBottomLat", "lat", "Lat", "LAT", "latitude", "Latitude"];
+const RIGHTBOTTOM_LON_KEYS = ["GPS_RightBottomLon", "lon", "Lon", "LON", "lng", "longitude", "Longitude"];
+
+function findUserDataValue(userData, candidates) {
+    if (!userData) return null;
+
+    for (const key of candidates) {
+        if (userData[key] !== undefined) return Number(userData[key]);
+    }
+
+    // 大文字小文字を無視して再検索
+    const lowerMap = {};
+    for (const k in userData) lowerMap[k.toLowerCase()] = userData[k];
+
+    for (const key of candidates) {
+        const v = lowerMap[key.toLowerCase()];
+        if (v !== undefined) return Number(v);
+    }
+
+    return null;
+}
+
+// 対象オブジェクト自身のuserDataに無ければ、子孫オブジェクトのuserDataも探す
+// (Blenderでメッシュ側にカスタムプロパティが付いているケースへの対応)
+function findUserDataValueDeep(obj, candidates) {
+    const direct = findUserDataValue(obj.userData, candidates);
+    if (direct !== null) return direct;
+
+    let found = null;
+    obj.traverse(child => {
+        if (found !== null) return;
+        if (child === obj) return;
+        const v = findUserDataValue(child.userData, candidates);
+        if (v !== null) found = v;
+    });
+
+    return found;
+}
+
+// デバッグ用: オブジェクト自身と子孫のuserDataを全部コンソールに書き出す
+function dumpUserData(obj) {
+    const result = {};
+    obj.traverse(child => {
+        if (child.userData && Object.keys(child.userData).length > 0) {
+            result[child.name || "(no name)"] = child.userData;
+        }
+    });
+    console.log("userData一覧:", JSON.stringify(result, null, 2));
+}
+
+
+//==========================================================
+// 基準点(GPS <-> ワールド座標の対応)
+//   LeftTop / RightBottom という名前のオブジェクトから取得する。
+//     - 緯度経度  : 各オブジェクトのカスタムプロパティ
+//     - ワールド座標 : 各オブジェクトのGLB内座標(X, Z平面。Yは高さ)
+//   GLBロード完了時に setupReferencePoints() で埋める。
+//==========================================================
+
+let GPS_LeftTopLat = null;
+let GPS_LeftTopLon = null;
+let GPS_RightBottomLat = null;
+let GPS_RightBottomLon = null;
+
+let MAP_LeftTopLat = null;   // LeftTop のワールドZ座標
+let MAP_LeftTopLon = null;   // LeftTop のワールドX座標
+let MAP_RightBottomLat = null;
+let MAP_RightBottomLon = null;
+
+let keisuuX = null;
+let keisuuY = null;
+
+let referenceReady = false;
+
+
+function setupReferencePoints(gltfScene) {
+
+    const leftTopObj = gltfScene.getObjectByName("LeftTop");
+    const rightBottomObj = gltfScene.getObjectByName("RightBottom");
+
+    if (!leftTopObj || !rightBottomObj) {
+        info.textContent =
+            "エラー: LeftTop / RightBottom オブジェクトがGLB内に見つかりません";
+        console.error("LeftTop または RightBottom オブジェクトが見つかりません");
+        return false;
+    }
+
+    // ワールド座標を確定させるため、行列を更新してから取得する
+    gltfScene.updateMatrixWorld(true);
+
+    const leftTopWorldPos = new THREE.Vector3();
+    leftTopObj.getWorldPosition(leftTopWorldPos);
+
+    const rightBottomWorldPos = new THREE.Vector3();
+    rightBottomObj.getWorldPosition(rightBottomWorldPos);
+
+    MAP_LeftTopLon = leftTopWorldPos.x;
+    MAP_LeftTopLat = leftTopWorldPos.z;
+    MAP_RightBottomLon = rightBottomWorldPos.x;
+    MAP_RightBottomLat = rightBottomWorldPos.z;
+
+    GPS_LeftTopLat = findUserDataValueDeep(leftTopObj, LEFTTOP_LAT_KEYS);
+    GPS_LeftTopLon = findUserDataValueDeep(leftTopObj, LEFTTOP_LON_KEYS);
+    GPS_RightBottomLat = findUserDataValueDeep(rightBottomObj, RIGHTBOTTOM_LAT_KEYS);
+    GPS_RightBottomLon = findUserDataValueDeep(rightBottomObj, RIGHTBOTTOM_LON_KEYS);
+
+    if (
+        GPS_LeftTopLat === null || GPS_LeftTopLon === null ||
+        GPS_RightBottomLat === null || GPS_RightBottomLon === null
+    ) {
+        info.textContent =
+            "エラー: LeftTop / RightBottom のカスタムプロパティ(緯度経度)が読み取れません。" +
+            "コンソールのuserData一覧を確認してください。";
+        console.error("カスタムプロパティが見つかりません。");
+        dumpUserData(leftTopObj);
+        dumpUserData(rightBottomObj);
+        return false;
+    }
+
+    // GPS 1度あたりのワールド座標変化量(スケール係数)
+    keisuuX = (MAP_RightBottomLon - MAP_LeftTopLon) / (GPS_RightBottomLon - GPS_LeftTopLon);
+    keisuuY = (MAP_RightBottomLat - MAP_LeftTopLat) / (GPS_RightBottomLat - GPS_LeftTopLat);
+
+    console.log("基準点セットアップ完了", {
+        GPS_LeftTopLat, GPS_LeftTopLon, GPS_RightBottomLat, GPS_RightBottomLon,
+        MAP_LeftTopLat, MAP_LeftTopLon, MAP_RightBottomLat, MAP_RightBottomLon
+    });
+
+    return true;
+}
+
+
+// 緯度経度 -> ワールド座標(X, Z)
+function gpsToWorld(lat, lon) {
+    const x = MAP_LeftTopLon + (lon - GPS_LeftTopLon) * keisuuX;
+    const z = MAP_LeftTopLat + (lat - GPS_LeftTopLat) * keisuuY;
+    return { x, z };
+}
+
+
+//==========================
+// GPS平滑化(指数移動平均)
+//==========================
+
+let filteredLat = null;
+let filteredLon = null;
+const SMOOTHING_ALPHA = 0.2;
+
+function smoothGPS(lat, lon) {
+    if (filteredLat === null) {
+        filteredLat = lat;
+        filteredLon = lon;
+    } else {
+        filteredLat = filteredLat * (1 - SMOOTHING_ALPHA) + lat * SMOOTHING_ALPHA;
+        filteredLon = filteredLon * (1 - SMOOTHING_ALPHA) + lon * SMOOTHING_ALPHA;
+    }
+    return { lat: filteredLat, lon: filteredLon };
+}
+
+
+//==========================
+// DOM
+//==========================
+
+const infoUi = document.getElementById("ui");
+const info = document.getElementById("info");
+const marker = document.getElementById("marker");
+const loading = document.getElementById("loading");
+
+const btnMode = document.getElementById("btnMode");
+const btnFollow = document.getElementById("btnFollow");
+const btnRoute = document.getElementById("btnRoute");
+const manualControls = document.getElementById("manualControls");
+const routeInfo = document.getElementById("routeInfo");
+const sxInput = document.getElementById("sx");
+const szInput = document.getElementById("sz");
+
+let manualMode = false;
+let followEnabled = true;
+
+btnMode.addEventListener("click", () => {
+    manualMode = !manualMode;
+    btnMode.textContent = manualMode ? "GPSモードに切替" : "手動モードに切替";
+    manualControls.classList.toggle("visible", manualMode);
+    if (manualMode) updatePositionFromManual();
+});
+
+btnFollow.addEventListener("click", () => {
+    followEnabled = !followEnabled;
+    btnFollow.textContent = "カメラ追従: " + (followEnabled ? "ON" : "OFF");
+    btnFollow.classList.toggle("active", followEnabled);
+});
+
+sxInput.addEventListener("input", updatePositionFromManual);
+szInput.addEventListener("input", updatePositionFromManual);
+
+
+//==========================================================
+// Three.js セットアップ
+//==========================================================
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x222222);
+
+const camera = new THREE.PerspectiveCamera(
+    45,
+    innerWidth / innerHeight,
+    0.1,
+    10000
+);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = false;
+
+// カメラとターゲットの相対位置(追従時に使う)
+const offset = new THREE.Vector3();
+
+controls.addEventListener("change", () => {
+    offset.subVectors(camera.position, controls.target);
+});
+
+// ライト
+scene.add(new THREE.AmbientLight(0xffffff, 2));
+const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+directionalLight.position.set(100, 200, 100);
+scene.add(directionalLight);
+
+// 軌跡(3D空間に描くライン)
+let traceLine = null;
+let traceMaterial = new THREE.LineBasicMaterial({ color: 0xff3b3b });
+const tracePoints = [];
+
+function addTracePoint(point) {
+    tracePoints.push(point.clone());
+
+    if (traceLine) {
+        scene.remove(traceLine);
+        traceLine.geometry.dispose();
+    }
+
+    const geometry = new THREE.BufferGeometry().setFromPoints(tracePoints);
+    traceLine = new THREE.Line(geometry, traceMaterial);
+    scene.add(traceLine);
+}
+
+
+//==========================================================
+// ルートノード / peer(隣接)関係の表示専用レイヤー
+//   ※ 3D Route Editor で保存したデータをそのまま「表示するだけ」だったが、
+//     ここに「道案内」ボタンによる経路探索(ダイクストラ法)と、
+//     探索結果パスの見た目区別(色・太さ)を追加する。
+//     編集・クリック操作・保存機能はここでは実装しない。
+//
+//   【道案内ロジック(改造版)】
+//     ・始点 : 現在地(GPS/手動モードで得られたワールド座標)に一番近いルートノード
+//     ・終点 : 施設(places)をランダムに1件選び、その施設に紐づくノードのうち
+//              始点から最短距離でたどり着けるノードを終点として採用する。
+//              (1つの施設が入り口違い等で複数ノードに紐づいている場合の対応)
+//     ・距離(重み) : ルートエディタでの編集時にあらかじめ計算されたユークリッド距離
+//              (peers内の dist 値)を使う。未設定の古いデータの場合のみ、
+//              その場でx,y,zから計算するフォールバックを行う。
+//==========================================================
+
+const ROUTE_API_URL = "https://192.168.137.1:3333/routes/route_editor3D";
+const PLACES_API_URL = "https://192.168.137.1:3333/routes/places";
+const PLACE_NODE_API_URL = "https://192.168.137.1:3333/routes/place_node";
+
+const routeNodesGroup = new THREE.Group();
+const routeLinksGroup = new THREE.Group();
+scene.add(routeNodesGroup);
+scene.add(routeLinksGroup);
+
+// 通常時(未探索時)の見た目
+const ROUTE_NODE_MAT = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
+const ROUTE_LINK_MAT = new THREE.MeshBasicMaterial({ color: 0x3b7ddd });
+const ROUTE_NODE_RADIUS = 0.5;
+const ROUTE_LINK_RADIUS = 0.15;
+
+// 経路探索でハイライトする際の見た目(通常時と明確に区別できる色・太さ)
+const PATH_START_MAT = new THREE.MeshBasicMaterial({ color: 0x00e5ff }); // 始点: シアン
+const PATH_END_MAT = new THREE.MeshBasicMaterial({ color: 0xff2d55 });  // 終点: マゼンタ寄りの赤
+const PATH_NODE_MAT = new THREE.MeshBasicMaterial({ color: 0xffcc00 }); // 経路上の中間ノード: 黄
+const PATH_LINK_MAT = new THREE.MeshBasicMaterial({ color: 0xffcc00 }); // 経路上のリンク: 黄
+const PATH_LINK_RADIUS_SCALE = 2.4; // 経路リンクは通常より太く表示する
+
+// ノードID -> Mesh、"id1|id2" -> {mesh, baseLen} のマップ(ハイライト切り替え・探索用)
+const nodeMeshMap = new Map();
+const linkMeshMap = new Map();
+
+// ノードID -> Vector3(ワールド座標)。現在地に一番近いノードを探す際にも使う。
+const nodePositions = new Map();
+
+// ノードID -> [{ id: 隣接ノードID, dist: 距離(重み) }, ...] の隣接リスト(経路探索用グラフ)
+const adjacency = new Map();
+
+// 施設(places)関連
+let placesList = [];              // [{id, name}, ...]
+const placeNodeMap = new Map();   // placeId -> Set(nodeId) 施設が紐づくノード群
+
+function pairKey(a, b) {
+    return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+// ノードAとノードBの位置から、その間を繋ぐ円柱メッシュを作る
+function createRouteLinkMesh(posA, posB) {
+    const mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(ROUTE_LINK_RADIUS, ROUTE_LINK_RADIUS, 1, 8),
+        ROUTE_LINK_MAT
+    );
+    const mid = posA.clone().add(posB).multiplyScalar(0.5);
+    const dir = posB.clone().sub(posA);
+    const len = dir.length();
+    mesh.position.copy(mid);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+    mesh.scale.set(1, len, 1);
+    return mesh;
+}
+
+// サーバーからノード一覧(id, x, y, z, peers[])を取得し、球体+円柱として表示する。
+// あわせて、経路探索(ダイクストラ法)に使う隣接リストも構築する。
+async function loadRouteNodes() {
+    try {
+        const res = await fetch(ROUTE_API_URL);
+        if (!res.ok) throw new Error(res.status);
+        const data = await res.json();
+        const nodeList = data.nodes || [];
+
+        // 既存表示・データがあればクリア
+        routeNodesGroup.clear();
+        routeLinksGroup.clear();
+        nodeMeshMap.clear();
+        linkMeshMap.clear();
+        adjacency.clear();
+        nodePositions.clear();
+        routeInfo.textContent = "";
+        routeInfo.classList.remove("visible");
+
+        // 1. ノード(球体)を配置 + 隣接リストの器を用意
+        nodeList.forEach(n => {
+            const pos = new THREE.Vector3(Number(n.x), Number(n.y), Number(n.z));
+            nodePositions.set(n.id, pos);
+            adjacency.set(n.id, []);
+
+            const mesh = new THREE.Mesh(
+                new THREE.SphereGeometry(ROUTE_NODE_RADIUS, 16, 16),
+                ROUTE_NODE_MAT
+            );
+            mesh.position.copy(pos);
+            routeNodesGroup.add(mesh);
+            nodeMeshMap.set(n.id, mesh);
+        });
+
+        // 2. peers(隣接関係)からリンク(円柱)を配置し、同時に隣接リスト(重み=距離)を構築する。
+        //    重複描画はしないが、探索用の隣接リストは両方向に登録する
+        //    (片方のノードにしかpeerが書かれていないデータにも対応するため)。
+        //    peers の各要素は { id, dist } 形式(ルートエディタ側で編集時に計算した
+        //    ユークリッド距離)を想定。古い形式(文字列IDのみ)が来た場合は
+        //    その場でx,y,zから距離を計算するフォールバックを行う。
+        const drawnKeys = new Set();
+        nodeList.forEach(n => {
+            (n.peers || []).forEach(peerRaw => {
+                const peerId = (typeof peerRaw === "string") ? peerRaw : peerRaw.id;
+                const storedDist = (typeof peerRaw === "object" && peerRaw !== null && typeof peerRaw.dist === "number")
+                    ? peerRaw.dist
+                    : null;
+
+                if (!nodePositions.has(peerId)) return;
+
+                const distance = (storedDist !== null)
+                    ? storedDist
+                    : nodePositions.get(n.id).distanceTo(nodePositions.get(peerId));
+
+                adjacency.get(n.id).push({ id: peerId, dist: distance });
+                if (adjacency.has(peerId) && !adjacency.get(peerId).some(e => e.id === n.id)) {
+                    adjacency.get(peerId).push({ id: n.id, dist: distance });
+                }
+
+                const key = pairKey(n.id, peerId);
+                if (drawnKeys.has(key)) return;
+                drawnKeys.add(key);
+
+                const mesh = createRouteLinkMesh(nodePositions.get(n.id), nodePositions.get(peerId));
+                routeLinksGroup.add(mesh);
+                linkMeshMap.set(key, { mesh, baseLen: mesh.scale.y });
+            });
+        });
+
+        console.log(`ルート表示: ノード${nodeList.length}件 / リンク${drawnKeys.size}件`);
+    } catch (e) {
+        console.error("ルートノードの読み込みに失敗しました:", e);
+        routeInfo.textContent = "エラー: ノードデータの取得に失敗しました";
+        routeInfo.classList.add("visible");
+    }
+}
+
+// サーバーから施設一覧(places)と施設⇔ノード紐づけ(place_node_link)を取得する。
+// 「道案内」でランダムに終点施設を選ぶ際に使用する。
+async function loadPlacesAndLinks() {
+    try {
+        const [placesRes, linksRes] = await Promise.all([
+            fetch(PLACES_API_URL),
+            fetch(PLACE_NODE_API_URL)
+        ]);
+        placesList = placesRes.ok ? await placesRes.json() : [];
+        const links = linksRes.ok ? await linksRes.json() : [];
+
+        placeNodeMap.clear();
+        links.forEach(l => {
+            if (!placeNodeMap.has(l.place_id)) placeNodeMap.set(l.place_id, new Set());
+            placeNodeMap.get(l.place_id).add(l.node_id);
+        });
+
+        console.log(`施設データ読み込み: 施設${placesList.length}件 / 紐づけ${links.length}件`);
+    } catch (e) {
+        console.error("施設データの読み込みに失敗しました:", e);
+    }
+}
+
+
+//==========================================================
+// 最短経路探索(ダイクストラ法)
+//==========================================================
+
+// startId から到達可能な全ノードまでの最短距離をダイクストラ法で求める(単一始点・全終点)。
+// 戻り値: { dist: Map(nodeId -> 距離), prev: Map(nodeId -> 1つ前のノードID) }
+// ※ ノード数が数百〜数千規模になる場合は、ここを二分ヒープ等の優先度付きキューに
+//    置き換えるとさらに高速化できる(現状は線形探索の単純実装)。
+function dijkstraAll(startId) {
+    const dist = new Map();
+    const prev = new Map();
+    const visited = new Set();
+
+    if (!adjacency.has(startId)) return { dist, prev };
+
+    for (const id of adjacency.keys()) dist.set(id, Infinity);
+    dist.set(startId, 0);
+
+    while (true) {
+        // 未訪問ノードの中から最小距離のものを選ぶ
+        let currentId = null;
+        let currentDist = Infinity;
+        for (const [id, d] of dist) {
+            if (!visited.has(id) && d < currentDist) {
+                currentDist = d;
+                currentId = id;
+            }
+        }
+
+        if (currentId === null) break; // これ以上到達できるノードがない
+        visited.add(currentId);
+
+        for (const edge of adjacency.get(currentId) || []) {
+            if (visited.has(edge.id)) continue;
+            const newDist = currentDist + edge.dist;
+            if (newDist < dist.get(edge.id)) {
+                dist.set(edge.id, newDist);
+                prev.set(edge.id, currentId);
+            }
+        }
+    }
+
+    return { dist, prev };
+}
+
+// dijkstraAllで得たprevマップから、startIdからendIdまでの経路(ノードID配列)を復元する。
+// 到達不能な場合は null を返す。
+function buildPath(prev, startId, endId) {
+    if (startId === endId) return [startId];
+    const path = [endId];
+    let cur = endId;
+    while (cur !== startId) {
+        cur = prev.get(cur);
+        if (cur === undefined) return null;
+        path.push(cur);
+    }
+    path.reverse();
+    return path;
+}
+
+// 指定したワールド座標に一番近いルートノードのIDを返す(現在地の始点決定に使用)。
+function findNearestNode(worldPos) {
+    let bestId = null;
+    let bestDist = Infinity;
+    nodePositions.forEach((pos, id) => {
+        const d = pos.distanceTo(worldPos);
+        if (d < bestDist) {
+            bestDist = d;
+            bestId = id;
+        }
+    });
+    return bestId;
+}
+
+// 全ノード・全リンクを通常表示(同色・同太さ)に戻す
+function resetRouteAppearance() {
+    nodeMeshMap.forEach(mesh => {
+        mesh.material = ROUTE_NODE_MAT;
+    });
+    linkMeshMap.forEach(entry => {
+        entry.mesh.material = ROUTE_LINK_MAT;
+        entry.mesh.scale.set(1, entry.baseLen, 1);
+    });
+}
+
+// 探索結果のパスだけ、色・太さを変えて一意に識別できるようにする。
+// 始点・終点・経由ノードでも色を分け、経路上のリンクは通常より太くする。
+function highlightPath(pathIds) {
+    resetRouteAppearance();
+
+    pathIds.forEach((id, i) => {
+        const mesh = nodeMeshMap.get(id);
+        if (!mesh) return;
+        if (i === 0) mesh.material = PATH_START_MAT;
+        else if (i === pathIds.length - 1) mesh.material = PATH_END_MAT;
+        else mesh.material = PATH_NODE_MAT;
+    });
+
+    for (let i = 0; i < pathIds.length - 1; i++) {
+        const key = pairKey(pathIds[i], pathIds[i + 1]);
+        const entry = linkMeshMap.get(key);
+        if (!entry) continue;
+        entry.mesh.material = PATH_LINK_MAT;
+        entry.mesh.scale.set(PATH_LINK_RADIUS_SCALE, entry.baseLen, PATH_LINK_RADIUS_SCALE);
+    }
+}
+
+btnRoute.addEventListener("click", () => {
+    if (adjacency.size === 0) {
+        routeInfo.textContent = "ノードデータがまだ読み込まれていません";
+        routeInfo.classList.add("visible");
+        return;
+    }
+
+    if (!hasIntersection) {
+        routeInfo.textContent = "現在地がまだ取得できていません";
+        routeInfo.classList.add("visible");
+        return;
+    }
+
+    if (!placesList.length) {
+        routeInfo.textContent = "施設データがまだ読み込まれていません";
+        routeInfo.classList.add("visible");
+        return;
+    }
+
+    // 現在地に一番近いノードを始点にする
+    const startId = findNearestNode(intersectionPoint);
+    if (startId === null || !adjacency.has(startId)) {
+        routeInfo.textContent = "始点ノードが見つかりませんでした";
+        routeInfo.classList.add("visible");
+        return;
+    }
+
+    // 始点から全ノードへの最短距離を1回だけ計算し、
+    // ランダムに選んだ施設が「到達可能かどうか」の判定に使い回す。
+    const { dist, prev } = dijkstraAll(startId);
+
+    // 施設をランダムな順番に並べ、到達可能なものが見つかるまで順に試す。
+    const shuffledPlaces = [...placesList].sort(() => Math.random() - 0.5);
+
+    let found = null;
+    for (const place of shuffledPlaces) {
+        const nodeIds = placeNodeMap.get(place.id);
+        if (!nodeIds || !nodeIds.size) continue; // ノードに紐づいていない施設はスキップ
+
+        // その施設が複数ノード(入り口違い等)に存在する場合は、
+        // 最短距離でたどり着ける方のノードを終点として採用する。
+        let bestEndId = null;
+        let bestDist = Infinity;
+        nodeIds.forEach(nodeId => {
+            const d = dist.get(nodeId);
+            if (d !== undefined && d < bestDist) {
+                bestDist = d;
+                bestEndId = nodeId;
+            }
+        });
+
+        if (bestEndId === null) continue; // この施設のどのノードにも到達不能
+
+        const path = buildPath(prev, startId, bestEndId);
+        if (path) {
+            found = { place, endId: bestEndId, path, distance: bestDist };
+            break;
+        }
+    }
+
+    if (!found) {
+        routeInfo.textContent = "到達可能な施設が見つかりませんでした(ノード間が孤立している可能性があります)";
+        routeInfo.classList.add("visible");
+        return;
+    }
+
+    highlightPath(found.path);
+
+    routeInfo.textContent =
+        `目的地施設 : ${found.place.name}\n` +
+        `始点ノード : ${startId}\n` +
+        `終点ノード : ${found.endId}\n` +
+        `経由ノード数 : ${found.path.length}\n` +
+        `合計距離 : ${found.distance.toFixed(2)}`;
+    routeInfo.classList.add("visible");
+});
+
+
+// Raycaster (上から地形へ向けて撃つ)
+const raycaster = new THREE.Raycaster();
+const rayDirection = new THREE.Vector3(0, -1, 0);
+const rayOrigin = new THREE.Vector3();
+const intersectionPoint = new THREE.Vector3();
+const screenPosition = new THREE.Vector3();
+
+let terrain = null;
+let hasIntersection = false;
+let rayStartHeight = 1000;
+
+let currentMarkerPos = null; // アニメーション用(現在表示中のワールド座標)
+let markerAnimId = null;
+
+
+function moveMarkerSmooth(targetPos) {
+
+    if (!currentMarkerPos) {
+        currentMarkerPos = targetPos.clone();
+        return;
+    }
+
+    const startPos = currentMarkerPos.clone();
+    const startTime = performance.now();
+    const duration = 500;
+
+    if (markerAnimId) {
+        cancelAnimationFrame(markerAnimId);
+        markerAnimId = null;
+    }
+
+    function step(time) {
+        let progress = (time - startTime) / duration;
+        if (progress > 1) progress = 1;
+
+        currentMarkerPos.lerpVectors(startPos, targetPos, progress);
+
+        if (followEnabled) {
+            controls.target.copy(currentMarkerPos);
+            camera.position.copy(currentMarkerPos).add(offset);
+            controls.update();
+        }
+
+        if (progress < 1) {
+            markerAnimId = requestAnimationFrame(step);
+        } else {
+            markerAnimId = null;
+        }
+    }
+
+    markerAnimId = requestAnimationFrame(step);
+}
+
+
+// 指定したワールドX, Zに対して地形に光線を当て、交点(高さ含む)を求めて
+// マーカー・軌跡・カメラ追従・情報表示を更新する
+function updatePositionFromWorldXZ(x, z, extraInfoLines) {
+
+    if (!terrain) return;
+
+    rayOrigin.set(x, rayStartHeight, z);
+    raycaster.set(rayOrigin, rayDirection);
+
+    const hits = raycaster.intersectObject(terrain, true);
+
+    if (!hits.length) {
+        hasIntersection = false;
+        marker.style.display = "none";
+        info.textContent = (extraInfoLines || []).concat(["交点なし(地形の外)"]).join("\n");
+        return;
+    }
+
+    hasIntersection = true;
+    intersectionPoint.copy(hits[0].point);
+
+    marker.style.display = "block";
+
+    moveMarkerSmooth(intersectionPoint);
+    addTracePoint(intersectionPoint);
+
+    const lines = (extraInfoLines || []).concat([
+        `X : ${intersectionPoint.x.toFixed(2)}`,
+        `Y : ${intersectionPoint.y.toFixed(2)}`,
+        `Z : ${intersectionPoint.z.toFixed(2)}`
+    ]);
+    info.textContent = lines.join("\n");
+}
+
+
+function updatePositionFromManual() {
+    if (!referenceReady) return;
+    const x = Number(sxInput.value);
+    const z = Number(szInput.value);
+    updatePositionFromWorldXZ(x, z, ["[手動モード]"]);
+}
+
+
+// マーカーの画面上の位置を更新(DOM赤丸)
+function updateMarkerScreenPosition() {
+    if (!hasIntersection) return;
+
+    screenPosition.copy(intersectionPoint);
+    screenPosition.project(camera);
+
+    const x = (screenPosition.x * 0.5 + 0.5) * innerWidth;
+    const y = (-screenPosition.y * 0.5 + 0.5) * innerHeight;
+
+    marker.style.left = `${x}px`;
+    marker.style.top = `${y}px`;
+}
+
+
+//==========================================================
+// GLBロード
+//==========================================================
+
+const loader = new GLTFLoader();
+
+loader.load(
+    "gakkou_zahyou03-軽量化.glb",
+
+    gltf => {
+
+        terrain = gltf.scene;
+        scene.add(terrain);
+
+        // モデルを原点へ移動
+        const box = new THREE.Box3().setFromObject(terrain);
+        const center = box.getCenter(new THREE.Vector3());
+        terrain.position.sub(center);
+        terrain.updateMatrixWorld(true);
+
+        // 基準点(LeftTop / RightBottom)をセットアップ
+        referenceReady = setupReferencePoints(terrain);
+
+        // マーカーサイズ・レイの開始高さをモデルサイズに合わせて調整
+        const size = box.getSize(new THREE.Vector3());
+        const modelScale = Math.max(size.x, size.y, size.z) || 100;
+        rayStartHeight = size.y + modelScale;
+
+        // 初期カメラ(モデル全体を見渡せる位置)
+        const boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+        const dist = Math.max(boundingSphere.radius * 2.2, 10);
+        camera.position.set(dist * 0.6, dist * 0.8, dist * 0.6);
+        controls.target.set(0, 0, 0);
+        controls.update();
+        offset.subVectors(camera.position, controls.target);
+
+        loading.remove();
+
+        if (referenceReady) {
+            startGPS();
+        }
+
+        // ルートエディタで保存したノード/peer関係を表示専用で読み込む
+        // (地形と同じ「centerを原点に引く」座標系を前提としているため、
+        //  地形のセットアップが終わったこのタイミングで読み込む)
+        loadRouteNodes();
+
+        // 道案内で使う施設一覧・施設⇔ノード紐づけも合わせて読み込んでおく
+        loadPlacesAndLinks();
+
+        console.log("GLB Loaded");
+    },
+
+    undefined,
+
+    error => {
+        console.error("GLB Load Error:", error);
+        loading.textContent = "GLB Load Error";
+    }
+);
+
+
+//==========================================================
+// GPS(コード1相当のロジック)
+//==========================================================
+
+function updateGPS(lat, lon, accuracy) {
+
+    const smoothed = smoothGPS(lat, lon);
+    const pos = gpsToWorld(smoothed.lat, smoothed.lon);
+
+    const extraLines = [
+        `緯度 : ${smoothed.lat.toFixed(8)}`,
+        `経度 : ${smoothed.lon.toFixed(8)}`,
+        accuracy !== undefined ? `精度 : ${accuracy.toFixed(1)} m` : null
+    ].filter(Boolean);
+
+    updatePositionFromWorldXZ(pos.x, pos.z, extraLines);
+}
+
+
+function startGPS() {
+
+    if (!navigator.geolocation) {
+        info.textContent = "GPS非対応です";
+        return;
+    }
+
+    let firstFixDone = false;
+
+    // ① 初回だけ:精度は問わず、とにかく速く1回だけ位置を取る
+    navigator.geolocation.getCurrentPosition(
+        position => {
+            if (firstFixDone || manualMode) return;
+
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+
+            filteredLat = lat;
+            filteredLon = lon;
+
+            updateGPS(lat, lon, position.coords.accuracy);
+        },
+        () => {},
+        { enableHighAccuracy: false, maximumAge: 60000, timeout: 3000 }
+    );
+
+    // ② 本命:高精度の継続監視
+    navigator.geolocation.watchPosition(
+        position => {
+            firstFixDone = true;
+            if (manualMode) return;
+
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            const accuracy = position.coords.accuracy;
+
+            if (accuracy > 15) return;
+
+            updateGPS(lat, lon, accuracy);
+        },
+        error => {
+            if (!manualMode) info.textContent = "GPSエラー : " + error.message;
+        },
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
+    );
+}
+
+
+//==========================================================
+// リサイズ・アニメーションループ
+//==========================================================
+
+window.addEventListener("resize", () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    updateMarkerScreenPosition();
+});
+
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    if (hasIntersection) updateMarkerScreenPosition();
+    renderer.render(scene, camera);
+}
+
+animate();
+
+</script>
+
+</body>
+</html>
