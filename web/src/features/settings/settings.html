@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>設定 | AstraWorks</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../home/style.css" />
+  <style>
+    .theme-btn { padding: .25rem .75rem; border-radius: 9999px; background: #e5e7eb; font-size: .875rem; transition: background-color .15s; }
+    .theme-btn[aria-pressed="true"] { background: #93b4ee; }
+    .switch { position: relative; width: 3rem; height: 1.75rem; border-radius: 9999px; background: #d1d5db; transition: background-color .2s; flex-shrink: 0; }
+    .switch::after { content: ''; position: absolute; top: .2rem; left: .2rem; width: 1.35rem; height: 1.35rem; border-radius: 9999px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .2s; }
+    .switch[aria-checked="true"] { background: #653ca8; }
+    .switch[aria-checked="true"]::after { transform: translateX(1.25rem); }
+    html[data-theme="dark"] body { background: #1f1a2b; color: #e5e7eb; }
+    html[data-theme="dark"] .bg-brand-100 { background: #3b2d55; }
+    html[data-theme="dark"] .bg-white { background: #2c2440; }
+    html[data-theme="dark"] .text-gray-700 { color: #d1d5db; }
+    html[data-theme="dark"] .theme-btn { background: #4b4560; color: #e5e7eb; }
+    html[data-theme="dark"] .theme-btn[aria-pressed="true"] { background: #5b7fc7; }
+    html[data-theme="dark"] nav { background: rgba(31,26,43,.95); border-color: #3b3350; }
+  </style>
+</head>
+<body class="bg-brand-50 min-h-screen font-sans antialiased">
+
+  <header class="sticky top-0 z-10">
+    <div class="flex items-center gap-3 bg-brand-100 px-3 py-4">
+      <button id="btn-back" aria-label="戻る"
+              class="w-10 h-10 rounded-full flex items-center justify-center text-2xl active:bg-white/40">←</button>
+      <h1 class="flex-1 text-2xl font-medium">設定</h1>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-md md:max-w-2xl lg:max-w-4xl px-3 pt-4 pb-28 space-y-2">
+    <section>
+      <h2 class="text-sm font-medium text-gray-700 mb-1">【アカウント】</h2>
+      <div class="bg-white rounded-2xl px-4 py-3 flex items-center">
+        <span id="account-name" class="flex-1 text-center"></span>
+        <button id="btn-edit-name" class="text-blue-600 text-sm">編集</button>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-sm font-medium text-gray-700 mb-1">【表示・テーマ】</h2>
+      <div class="bg-white rounded-2xl px-4 py-3 flex items-center gap-2">
+        <span class="flex-1">テーマ</span>
+        <div class="flex gap-1" role="group" aria-label="テーマ">
+          <button class="theme-btn" data-theme-value="light">ライト</button>
+          <button class="theme-btn" data-theme-value="dark">ダーク</button>
+          <button class="theme-btn" data-theme-value="system">システム</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="text-sm font-medium text-gray-700 mb-1">【プッシュ通知】</h2>
+      <div class="bg-white rounded-2xl px-4 py-3 flex items-center">
+        <span class="flex-1 text-center">プッシュ通知のON/OFF</span>
+        <button id="push-switch" class="switch" role="switch" aria-checked="false" aria-label="プッシュ通知"></button>
+      </div>
+      <p id="push-message" class="text-xs text-red-500 mt-1 px-2 hidden"></p>
+    </section>
+
+    <section>
+      <h2 class="text-sm font-medium text-gray-700 mb-1">【その他】</h2>
+      <div class="bg-white rounded-2xl px-4 py-3 space-y-3 min-h-[7rem]">
+        <div class="flex items-center">
+          <span class="flex-1">バージョン</span>
+          <span id="app-version" class="text-sm"></span>
+        </div>
+        <button id="btn-privacy" class="block w-full text-left">プライバシーポリシー</button>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="name-dialog" class="rounded-2xl p-0 w-[90%] max-w-sm backdrop:bg-black/40">
+    <form method="dialog" id="name-form" class="p-4 space-y-3">
+      <h3 class="text-lg font-medium">アカウント名の編集</h3>
+      <input name="name" maxlength="20" required
+             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-800" />
+      <div class="flex justify-end gap-2">
+        <button type="button" id="btn-name-cancel" class="px-4 py-2 rounded-full bg-gray-200 text-gray-800">キャンセル</button>
+        <button type="submit" class="px-5 py-2 rounded-full bg-brand-500 text-white">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="privacy-dialog" class="rounded-2xl p-0 w-[90%] max-w-sm backdrop:bg-black/40">
+    <div class="p-4 space-y-3 text-gray-800">
+      <h3 class="text-lg font-medium">プライバシーポリシー</h3>
+      <p class="text-sm leading-relaxed">
+        はちナビくんは、学内案内の提供を目的として本アプリを運営しています。
+        設定内容やイベント情報は、ご利用の端末内にのみ保存され、外部へ送信されることはありません。
+      </p>
+      <div class="flex justify-end">
+        <button id="btn-privacy-close" class="px-5 py-2 rounded-full bg-brand-500 text-white">閉じる</button>
+      </div>
+    </div>
+  </dialog>
+
+  <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-gray-200">
+    <div class="mx-auto max-w-md md:max-w-2xl lg:max-w-4xl flex items-center px-2 py-1.5 safe-bottom">
+      <button class="tab-btn" data-href="../home/index.html"><span class="text-lg">🏠</span><span class="text-[10px]">ホーム</span></button>
+      <button class="tab-btn" data-href="../map/3Dmap.html"><span class="text-lg">🗺</span><span class="text-[10px]">マップ</span></button>
+      <button class="tab-btn" data-href="../event/event.html"><span class="text-lg">📅</span><span class="text-[10px]">イベント</span></button>
+      <button class="tab-btn active" data-href="../settings/settings.html"><span class="text-lg">⚙️</span><span class="text-[10px]">設定</span></button>
+    </div>
+  </nav>
+
+<script type="module">
+const APP_VERSION = 'v1.0.2';
+const STORAGE_KEY = 'astra.settings.v1';
+const DEFAULTS = { name: '八王子太郎', theme: 'system', push: true };
+
+const $ = (sel) => document.querySelector(sel);
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+let settings = load();
+
+function load() {
+  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }; }
+  catch { return { ...DEFAULTS }; }
+}
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); } catch {}
+}
+
+function applyTheme() {
+  const dark = settings.theme === 'dark' || (settings.theme === 'system' && darkQuery.matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  document.querySelectorAll('[data-theme-value]').forEach(b => {
+    b.setAttribute('aria-pressed', String(b.dataset.themeValue === settings.theme));
+  });
+}
+function render() {
+  $('#account-name').textContent = settings.name;
+  $('#push-switch').setAttribute('aria-checked', String(settings.push));
+  $('#app-version').textContent = APP_VERSION;
+  applyTheme();
+}
+darkQuery.addEventListener('change', applyTheme);
+
+async function togglePush() {
+  const msg = $('#push-message');
+  msg.classList.add('hidden');
+  const next = !settings.push;
+  if (next && 'Notification' in window && Notification.permission !== 'granted') {
+    const perm = await Notification.requestPermission().catch(() => 'denied');
+    if (perm !== 'granted') {
+      msg.textContent = 'ブラウザの通知が許可されていません（ブラウザの設定から許可してください）';
+      msg.classList.remove('hidden');
+    }
+  }
+  settings.push = next;
+  save();
+  render();
+}
+
+const nameDialog = $('#name-dialog');
+const nameForm = $('#name-form');
+nameForm.addEventListener('submit', () => {
+  const v = nameForm.elements.name.value.trim();
+  if (v) { settings.name = v; save(); render(); }
+});
+
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  const themeBtn = t.closest('[data-theme-value]');
+  if (themeBtn) { settings.theme = themeBtn.dataset.themeValue; save(); applyTheme(); return; }
+  if (t.closest('#push-switch')) { togglePush(); return; }
+  if (t.closest('#btn-edit-name')) { nameForm.elements.name.value = settings.name; nameDialog.showModal(); return; }
+  if (t.closest('#btn-name-cancel')) { nameDialog.close(); return; }
+  if (t.closest('#btn-privacy')) { $('#privacy-dialog').showModal(); return; }
+  if (t.closest('#btn-privacy-close')) { $('#privacy-dialog').close(); return; }
+  const nav = t.closest('[data-href]');
+  if (nav) { location.href = nav.dataset.href; return; }
+  if (t.closest('#btn-back')) {
+    if (history.length > 1) history.back();
+    else location.href = '../home/index.html';
+  }
+});
+
+render();
+</script>
+</body>
+</html>
