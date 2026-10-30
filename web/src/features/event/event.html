@@ -21,9 +21,10 @@
       <button id="btn-add"
               class="px-4 py-1.5 rounded-full bg-brand-500 text-white text-sm font-medium shadow-sm active:bg-brand-600">＋ 追加</button>
     </div>
-    <div class="grid grid-cols-2 bg-white text-xl" role="tablist">
+    <div class="grid grid-cols-3 bg-white text-xl" role="tablist">
       <button data-tab="ongoing"  role="tab" class="py-2 border-b-2 border-blue-600">開催中</button>
       <button data-tab="upcoming" role="tab" class="py-2 border-b-2 border-transparent">予定</button>
+      <button data-tab="ended"    role="tab" class="py-2 border-b-2 border-transparent">終了</button>
     </div>
   </header>
 
@@ -71,9 +72,10 @@
   <!-- 下部ナビ(ホームと同じ見た目) -->
   <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-gray-200">
     <div class="mx-auto max-w-md md:max-w-2xl lg:max-w-4xl flex items-center px-2 py-1.5 safe-bottom">
+      <button class="tab-btn" data-href="../home/index.html"><span class="text-lg">🏠</span><span class="text-[10px]">ホーム</span></button>
       <button class="tab-btn" data-href="../map/3Dmap.html"><span class="text-lg">🗺</span><span class="text-[10px]">マップ</span></button>
       <button class="tab-btn active" data-href="../event/event.html"><span class="text-lg">📅</span><span class="text-[10px]">イベント</span></button>
-      <button class="tab-btn" data-href="../notification/notification.html"><span class="text-lg">🔔</span><span class="text-[10px]">通知</span></button>
+      <button class="tab-btn" data-href="../settings/settings.html"><span class="text-lg">⚙️</span><span class="text-[10px]">設定</span></button>
     </div>
   </nav>
 
@@ -88,6 +90,7 @@
 const API_BASE = 'http://localhost:3000';
 const MAP_NAV_PAGE = '../map/3Dmap.html';
 const STORAGE_KEY = 'astra.events.v1';
+const DELETE_AFTER_MS = 24 * 60 * 60 * 1000; // 終了から24時間で自動削除（ホームの lib/schedule.ts と同じ値）
 
 const $ = (sel) => document.querySelector(sel);
 const list = $('#event-list');
@@ -111,6 +114,17 @@ function loadEvents() {
 function saveEvents() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
 }
+// 終了から24時間たったイベントを削除（変更があった時だけ保存）
+function purgeExpired(now = Date.now()) {
+  const kept = events.filter(ev => {
+    const end = new Date(ev.endAt).getTime();
+    return isNaN(end) || end + DELETE_AFTER_MS > now;
+  });
+  if (kept.length !== events.length) {
+    events = kept;
+    try { saveEvents(); } catch {}
+  }
+}
 
 // ---------- 表示用 ----------
 const esc = (s) => String(s).replace(/[&<>"']/g, c => (
@@ -131,17 +145,20 @@ function statusOf(ev, now = new Date()) {
   return new Date(ev.startAt) <= now ? 'ongoing' : 'upcoming';
 }
 
+const TAB_LABEL = { ongoing: '開催中の', upcoming: '予定の', ended: '終了した' };
+
 function cardHtml(ev) {
+  const ended = statusOf(ev) === 'ended';
   const img = ev.image
     ? `<img src="${ev.image}" alt="" class="h-36 w-full object-cover">`
     : `<div class="h-36 w-full bg-gray-300 flex items-center justify-center text-sm text-gray-700">イベントの画像</div>`;
   return `
-    <li class="relative overflow-hidden rounded-2xl bg-white shadow-sm border border-brand-100/60">
+    <li class="relative overflow-hidden rounded-2xl bg-white shadow-sm border border-brand-100/60 ${ended ? 'opacity-70' : ''}">
       <button data-delete="${ev.id}" aria-label="削除"
               class="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 text-white text-sm">×</button>
       ${img}
       <div class="px-3 py-2 space-y-1 text-sm">
-        <p class="text-base font-bold">${esc(ev.title)}</p>
+        <p class="text-base font-bold">${esc(ev.title)}${ended ? ' <span class="ml-1 align-middle text-[11px] font-normal px-1.5 rounded bg-gray-200 text-gray-500">終了</span>' : ''}</p>
         <p>日時: ${formatPeriod(ev.startAt, ev.endAt)}</p>
         <div class="flex items-center justify-between gap-2">
           <p class="min-w-0 truncate">場所：${esc(ev.placeName)}</p>
@@ -165,10 +182,11 @@ function render() {
   const now = new Date();
   const shown = events
     .filter(ev => statusOf(ev, now) === tab)
-    .sort((a, b) => a.startAt.localeCompare(b.startAt));
+    // 終了タブは新しく終わった順、それ以外は開始が早い順
+    .sort((a, b) => tab === 'ended' ? b.endAt.localeCompare(a.endAt) : a.startAt.localeCompare(b.startAt));
 
   list.innerHTML = shown.map(cardHtml).join('');
-  const text = shown.length ? '' : `${tab === 'ongoing' ? '開催中' : '予定'}のイベントはありません`;
+  const text = shown.length ? '' : `${TAB_LABEL[tab]}イベントはありません`;
   message.textContent = text;
   message.classList.toggle('hidden', !text);
 }
@@ -259,7 +277,7 @@ form.addEventListener('submit', (e) => {
 
   dialog.close();
   const st = statusOf(ev);
-  if (st !== 'ended') tab = st; // 追加したイベントのタブへ
+  tab = st; // 追加したイベントのタブへ
   render();
 });
 
@@ -294,7 +312,10 @@ document.addEventListener('click', (e) => {
 });
 
 loadPlaces();
+purgeExpired();
 render();
+// 1分ごとに 自動削除＋タブ振り分け(開催中→終了 など)を更新
+setInterval(() => { purgeExpired(); render(); }, 60_000);
 </script>
 </body>
 </html>
