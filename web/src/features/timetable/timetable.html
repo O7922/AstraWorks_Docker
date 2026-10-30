@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>時間割 | AstraWorks</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" />
+  <!-- Tailwind / 共通コンポーネント(.tab-btn 等)はホームのCSSを流用 -->
+  <link rel="stylesheet" href="../home/style.css" />
+</head>
+<body class="bg-brand-50 min-h-screen font-sans antialiased">
+
+  <!-- ヘッダー -->
+  <header class="sticky top-0 z-10">
+    <div class="flex items-center gap-3 bg-brand-100 px-3 py-4">
+      <button id="btn-back" aria-label="戻る"
+              class="w-10 h-10 rounded-full flex items-center justify-center text-2xl active:bg-white/40">←</button>
+      <h1 class="flex-1 text-2xl font-medium">時間割</h1>
+      <button id="btn-periods"
+              class="px-4 py-1.5 rounded-full bg-brand-500 text-white text-sm font-medium shadow-sm active:bg-brand-600">⏰ 時限の時間</button>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-md md:max-w-2xl lg:max-w-4xl px-2 pt-4 pb-28 space-y-3">
+    <p class="text-xs text-gray-500 px-2">マスをタップして科目・教室を登録できます（この端末に保存されます）</p>
+    <div class="overflow-x-auto">
+      <table id="tt" class="w-full table-fixed border-separate border-spacing-1 text-xs"></table>
+    </div>
+    <label class="flex items-center gap-2 px-2 text-sm">
+      <input id="chk-sat" type="checkbox" class="w-4 h-4 accent-brand-500"> 土曜日を表示
+    </label>
+  </main>
+
+  <!-- マス編集ダイアログ -->
+  <dialog id="cell-dialog" class="w-[min(92vw,420px)] rounded-2xl p-0 backdrop:bg-black/40">
+    <form id="cell-form" class="space-y-3 p-5">
+      <h2 id="cell-title" class="text-lg font-bold"></h2>
+      <label class="block text-sm">科目名<span class="text-red-500">*</span>
+        <input name="subject" required maxlength="50"
+               class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-400">
+      </label>
+      <label class="block text-sm">教室
+        <input name="room" list="place-list" maxlength="50" placeholder="例: B棟601教室"
+               class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-400">
+        <datalist id="place-list"></datalist>
+        <span id="place-hint" class="block mt-1 text-xs text-gray-500"></span>
+      </label>
+      <div class="flex items-center gap-2 pt-1">
+        <button type="button" id="cell-delete" class="px-3 py-2 rounded-full text-red-600 text-sm">削除</button>
+        <span class="flex-1"></span>
+        <button type="button" id="cell-cancel" class="px-4 py-2 rounded-full">キャンセル</button>
+        <button type="submit" class="px-5 py-2 rounded-full bg-brand-500 text-white">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 時限設定ダイアログ -->
+  <dialog id="period-dialog" class="w-[min(92vw,420px)] rounded-2xl p-0 backdrop:bg-black/40">
+    <form id="period-form" class="space-y-3 p-5">
+      <h2 class="text-lg font-bold">時限の時間</h2>
+      <ul id="period-list" class="space-y-2"></ul>
+      <button type="button" id="period-add" class="text-sm text-brand-600">＋ 時限を追加</button>
+      <p id="period-error" class="hidden text-sm text-red-600"></p>
+      <div class="flex justify-end gap-2 pt-1">
+        <button type="button" id="period-cancel" class="px-4 py-2 rounded-full">キャンセル</button>
+        <button type="submit" class="px-5 py-2 rounded-full bg-brand-500 text-white">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 下部ナビ(ホームと同じ見た目) -->
+  <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-gray-200">
+    <div class="mx-auto max-w-md md:max-w-2xl lg:max-w-4xl flex items-center px-2 py-1.5 safe-bottom">
+      <button class="tab-btn" data-href="../home/index.html"><span class="text-lg">🏠</span><span class="text-[10px]">ホーム</span></button>
+      <button class="tab-btn" data-href="../map/3Dmap.html"><span class="text-lg">🗺</span><span class="text-[10px]">マップ</span></button>
+      <button class="tab-btn" data-href="../event/event.html"><span class="text-lg">📅</span><span class="text-[10px]">イベント</span></button>
+      <button class="tab-btn" data-href="../settings/settings.html"><span class="text-lg">⚙️</span><span class="text-[10px]">設定</span></button>
+    </div>
+  </nav>
+
+<script type="module">
+// =====================================================================
+// 時間割画面（timetable.html 単体で完結）
+//  ・端末の localStorage に保存（API/DBは未変更）
+//  ・キー/形式はホームの features/home/lib/schedule.ts と共通
+//  ・教室名が places API の名前と一致すれば placeId も保存 → ホームから案内可能
+// =====================================================================
+
+const API_BASE = 'http://localhost:3000';
+const STORAGE_KEY = 'astra.timetable.v1';
+const DAYS = ['', '月', '火', '水', '木', '金', '土'];
+const DEFAULT_PERIODS = [
+  { start: '09:30', end: '11:00' },
+  { start: '11:10', end: '12:40' },
+  { start: '13:30', end: '15:00' },
+  { start: '15:10', end: '16:40' },
+];
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+));
+
+let tt = load();
+let places = [];
+let editing = null; // "曜日-時限index"
+
+// ---------- 保存 ----------
+function load() {
+  try {
+    const v = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    return {
+      periods: Array.isArray(v.periods) && v.periods.length ? v.periods : DEFAULT_PERIODS.map(p => ({ ...p })),
+      showSat: !!v.showSat,
+      cells: v.cells && typeof v.cells === 'object' ? v.cells : {},
+    };
+  } catch {
+    return { periods: DEFAULT_PERIODS.map(p => ({ ...p })), showSat: false, cells: {} };
+  }
+}
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(tt));
+}
+
+// ---------- 表 ----------
+function render() {
+  const days = tt.showSat ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5];
+  const today = new Date().getDay();
+
+  const head = `<tr><th class="w-12"></th>${days.map(d => `
+    <th class="py-1 rounded-lg ${d === today ? 'bg-brand-500 text-white' : 'text-gray-600'}">${DAYS[d]}</th>`).join('')}</tr>`;
+
+  const rows = tt.periods.map((p, i) => `
+    <tr>
+      <th class="align-middle text-gray-600 font-normal leading-tight">
+        <div class="text-sm font-bold">${i + 1}</div>
+        <div class="text-[9px]">${esc(p.start)}<br>${esc(p.end)}</div>
+      </th>
+      ${days.map(d => {
+        const c = tt.cells[`${d}-${i}`];
+        const todayCls = d === today ? 'ring-1 ring-brand-300' : '';
+        return c && c.subject
+          ? `<td data-cell="${d}-${i}" class="h-16 p-1 rounded-lg bg-white shadow-sm cursor-pointer align-top ${todayCls}">
+               <div class="font-bold leading-tight break-words line-clamp-2">${esc(c.subject)}</div>
+               <div class="text-[10px] text-gray-500 leading-tight break-words mt-0.5">${esc(c.room)}${c.placeId != null ? ' 📍' : ''}</div>
+             </td>`
+          : `<td data-cell="${d}-${i}" class="h-16 rounded-lg bg-white/50 border border-dashed border-brand-200 text-center text-brand-300 cursor-pointer ${todayCls}">＋</td>`;
+      }).join('')}
+    </tr>`).join('');
+
+  $('#tt').innerHTML = head + rows;
+  $('#chk-sat').checked = tt.showSat;
+}
+
+// ---------- 場所一覧(既存API) ----------
+async function loadPlaces() {
+  try {
+    const res = await fetch(`${API_BASE}/routes/places`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    places = await res.json();
+    $('#place-list').innerHTML = places.map(p => `<option value="${esc(p.name)}"></option>`).join('');
+  } catch (err) {
+    console.error('[timetable] places API error:', err);
+  }
+  updateHint();
+}
+const findPlace = (name) => places.find(p => p.name === name.trim());
+
+function updateHint() {
+  const room = $('#cell-form').elements.room.value;
+  const hint = $('#place-hint');
+  if (!room.trim()) hint.textContent = places.length ? '候補から選ぶとホームからルート案内できます' : '';
+  else if (findPlace(room)) hint.textContent = '📍 マップの場所と紐付きました（ルート案内可）';
+  else hint.textContent = places.length ? 'マップに無い名前です（表示のみ・案内不可）' : '場所一覧を取得できないため表示のみになります';
+}
+
+// ---------- マス編集 ----------
+const cellDialog = $('#cell-dialog');
+const cellForm = $('#cell-form');
+
+function openCell(key) {
+  editing = key;
+  const [d, i] = key.split('-').map(Number);
+  const p = tt.periods[i];
+  const c = tt.cells[key];
+  $('#cell-title').textContent = `${DAYS[d]}曜 ${i + 1}限（${p.start}〜${p.end}）`;
+  cellForm.elements.subject.value = c?.subject || '';
+  cellForm.elements.room.value = c?.room || '';
+  $('#cell-delete').classList.toggle('invisible', !c);
+  updateHint();
+  if (!places.length) loadPlaces();
+  cellDialog.showModal();
+}
+
+cellForm.elements.room.addEventListener('input', updateHint);
+
+cellForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const subject = cellForm.elements.subject.value.trim();
+  const room = cellForm.elements.room.value.trim();
+  if (!subject) return;
+  const place = findPlace(room);
+  // places が取れなかった時は既存の placeId を維持（教室名が変わっていなければ）
+  const prev = tt.cells[editing];
+  const placeId = place ? place.id : (prev && prev.room === room ? prev.placeId ?? null : null);
+  tt.cells[editing] = { subject, room, placeId };
+  save();
+  cellDialog.close();
+  render();
+});
+
+$('#cell-delete').addEventListener('click', () => {
+  delete tt.cells[editing];
+  save();
+  cellDialog.close();
+  render();
+});
+$('#cell-cancel').addEventListener('click', () => cellDialog.close());
+
+// ---------- 時限設定 ----------
+const periodDialog = $('#period-dialog');
+const periodList = $('#period-list');
+const periodErr = $('#period-error');
+
+function periodRow(p, i) {
+  return `
+    <li class="flex items-center gap-2 text-sm" data-row>
+      <span class="w-8 font-bold">${i + 1}限</span>
+      <input type="time" value="${esc(p.start)}" data-start required class="flex-1 rounded-lg border border-gray-300 px-2 py-1">
+      〜
+      <input type="time" value="${esc(p.end)}" data-end required class="flex-1 rounded-lg border border-gray-300 px-2 py-1">
+      <button type="button" data-remove class="w-7 h-7 rounded-full text-gray-400 hover:bg-gray-100">×</button>
+    </li>`;
+}
+function renderPeriodRows(periods) {
+  periodList.innerHTML = periods.map(periodRow).join('');
+}
+function readPeriodRows() {
+  return [...periodList.querySelectorAll('[data-row]')].map(li => ({
+    start: li.querySelector('[data-start]').value,
+    end: li.querySelector('[data-end]').value,
+  }));
+}
+
+$('#btn-periods').addEventListener('click', () => {
+  periodErr.classList.add('hidden');
+  renderPeriodRows(tt.periods);
+  periodDialog.showModal();
+});
+$('#period-add').addEventListener('click', () => {
+  const ps = readPeriodRows();
+  const last = ps[ps.length - 1];
+  ps.push(last ? { start: last.end, end: last.end } : { start: '09:00', end: '10:30' });
+  renderPeriodRows(ps);
+});
+periodList.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-remove]');
+  if (!btn) return;
+  const ps = readPeriodRows();
+  if (ps.length <= 1) return;
+  ps.splice([...periodList.children].indexOf(btn.closest('li')), 1);
+  renderPeriodRows(ps);
+});
+$('#period-cancel').addEventListener('click', () => periodDialog.close());
+
+$('#period-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const ps = readPeriodRows();
+  const bad = ps.findIndex((p, i) => !p.start || !p.end || p.end <= p.start || (i > 0 && p.start < ps[i - 1].end));
+  if (bad >= 0) {
+    periodErr.textContent = `${bad + 1}限の時間を確認してください（終了は開始より後、前の時限と重ならないように）`;
+    periodErr.classList.remove('hidden');
+    return;
+  }
+  // 減らした時限に入っていた授業は削除
+  const removed = Object.keys(tt.cells).filter(k => Number(k.split('-')[1]) >= ps.length);
+  if (removed.length && !confirm(`${removed.length}件の授業が消えます。よろしいですか？`)) return;
+  removed.forEach(k => delete tt.cells[k]);
+  tt.periods = ps;
+  save();
+  periodDialog.close();
+  render();
+});
+
+// ---------- その他 ----------
+$('#chk-sat').addEventListener('change', (e) => {
+  tt.showSat = e.target.checked;
+  save();
+  render();
+});
+
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  const cell = t.closest('[data-cell]');
+  if (cell) { openCell(cell.dataset.cell); return; }
+
+  const nav = t.closest('[data-href]');
+  if (nav) { location.href = nav.dataset.href; return; }
+
+  if (t.closest('#btn-back')) {
+    if (history.length > 1) history.back();
+    else location.href = '../home/index.html';
+  }
+});
+
+loadPlaces();
+render();
+</script>
+</body>
+</html>

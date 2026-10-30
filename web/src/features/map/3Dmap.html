@@ -277,5 +277,13 @@ html,body{
 
     </script>
 
+<!-- ホームへ戻るボタン -->
+<a id="home-btn" href="../home/index.html" aria-label="ホームへ戻る"
+   style="position:fixed;right:16px;top:16px;z-index:200;display:flex;align-items:center;gap:6px;padding:10px 16px;border-radius:9999px;background:#8b5cd6;color:#fff;font-size:15px;font-weight:600;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.3);">🏠 ホーム</a>
+<script>
+  // ホーム画面のマッププレビュー(iframe)内ではホームボタンを出さない
+  //（押すとiframeの中にホーム画面が入れ子で表示されてしまうため）
+  if (window.self !== window.top) document.getElementById('home-btn').style.display = 'none';
+</script>
 </body>
 </html>

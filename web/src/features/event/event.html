@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>イベント情報 | AstraWorks</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" />
+  <!-- Tailwind / 共通コンポーネント(.tab-btn 等)はホームのCSSを流用 -->
+  <link rel="stylesheet" href="../home/style.css" />
+</head>
+<body class="bg-brand-50 min-h-screen font-sans antialiased">
+
+  <!-- ヘッダー + タブ -->
+  <header class="sticky top-0 z-10">
+    <div class="flex items-center gap-3 bg-brand-100 px-3 py-4">
+      <button id="btn-back" aria-label="戻る"
+              class="w-10 h-10 rounded-full flex items-center justify-center text-2xl active:bg-white/40">←</button>
+      <h1 class="flex-1 text-2xl font-medium">イベント情報</h1>
+      <button id="btn-add"
+              class="px-4 py-1.5 rounded-full bg-brand-500 text-white text-sm font-medium shadow-sm active:bg-brand-600">＋ 追加</button>
+    </div>
+    <div class="grid grid-cols-3 bg-white text-xl" role="tablist">
+      <button data-tab="ongoing"  role="tab" class="py-2 border-b-2 border-blue-600">開催中</button>
+      <button data-tab="upcoming" role="tab" class="py-2 border-b-2 border-transparent">予定</button>
+      <button data-tab="ended"    role="tab" class="py-2 border-b-2 border-transparent">終了</button>
+    </div>
+  </header>
+
+  <!-- 一覧 -->
+  <main class="mx-auto max-w-md md:max-w-2xl px-4 pt-5 pb-28">
+    <ul id="event-list" class="space-y-6"></ul>
+    <p id="event-message" class="hidden text-center text-gray-500 text-sm py-10"></p>
+  </main>
+
+  <!-- 追加ダイアログ -->
+  <dialog id="add-dialog" class="w-[min(92vw,420px)] rounded-2xl p-0 backdrop:bg-black/40">
+    <form id="add-form" class="space-y-3 p-5">
+      <h2 class="text-lg font-bold">イベントを追加</h2>
+      <label class="block text-sm">イベント名<span class="text-red-500">*</span>
+        <input name="title" required maxlength="100"
+               class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-400">
+      </label>
+      <label class="block text-sm">開始<span class="text-red-500">*</span>
+        <input name="startAt" type="datetime-local" required
+               class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-400">
+      </label>
+      <label class="block text-sm">終了<span class="text-red-500">*</span>
+        <input name="endAt" type="datetime-local" required
+               class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-brand-400">
+      </label>
+      <label class="block text-sm">場所<span class="text-red-500">*</span>
+        <select name="placeId" required
+                class="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 outline-none focus:border-brand-400">
+          <option value="">読み込み中…</option>
+        </select>
+      </label>
+      <label class="block text-sm">画像
+        <input name="image" type="file" accept="image/*" class="mt-1 w-full text-sm">
+      </label>
+      <img id="add-preview" class="hidden max-h-40 w-full rounded-lg object-cover" alt="">
+      <p id="add-error" class="hidden text-sm text-red-600"></p>
+      <div class="flex justify-end gap-2 pt-1">
+        <button type="button" id="add-cancel" class="px-4 py-2 rounded-full">キャンセル</button>
+        <button type="submit" id="add-submit"
+                class="px-5 py-2 rounded-full bg-brand-500 text-white disabled:opacity-50">追加</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 下部ナビ(ホームと同じ見た目) -->
+  <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-gray-200">
+    <div class="mx-auto max-w-md md:max-w-2xl lg:max-w-4xl flex items-center px-2 py-1.5 safe-bottom">
+      <button class="tab-btn" data-href="../home/index.html"><span class="text-lg">🏠</span><span class="text-[10px]">ホーム</span></button>
+      <button class="tab-btn" data-href="../map/3Dmap.html"><span class="text-lg">🗺</span><span class="text-[10px]">マップ</span></button>
+      <button class="tab-btn active" data-href="../event/event.html"><span class="text-lg">📅</span><span class="text-[10px]">イベント</span></button>
+      <button class="tab-btn" data-href="../settings/settings.html"><span class="text-lg">⚙️</span><span class="text-[10px]">設定</span></button>
+    </div>
+  </nav>
+
+<script type="module">
+// =====================================================================
+// イベント画面（event.html 単体で完結）
+//  ・イベントは端末の localStorage に保存（API/DBは未変更）
+//  ・場所の候補は既存API /routes/places から取得
+//  ・「ナビ開始」は検索画面と同じく 3Dmap.html?to=<place_id>&mode=navigate へ
+// =====================================================================
+
+const API_BASE = 'http://localhost:3000';
+const MAP_NAV_PAGE = '../map/3Dmap.html';
+const STORAGE_KEY = 'astra.events.v1';
+const DELETE_AFTER_MS = 24 * 60 * 60 * 1000; // 終了から24時間で自動削除（ホームの lib/schedule.ts と同じ値）
+
+const $ = (sel) => document.querySelector(sel);
+const list = $('#event-list');
+const message = $('#event-message');
+const dialog = $('#add-dialog');
+const form = $('#add-form');
+const errEl = $('#add-error');
+const preview = $('#add-preview');
+const placeSelect = form.elements.placeId;
+
+let tab = 'ongoing';
+let events = loadEvents();
+let places = [];
+let imageDataUrl = null;
+
+// ---------- 保存 ----------
+function loadEvents() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveEvents() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+}
+// 終了から24時間たったイベントを削除（変更があった時だけ保存）
+function purgeExpired(now = Date.now()) {
+  const kept = events.filter(ev => {
+    const end = new Date(ev.endAt).getTime();
+    return isNaN(end) || end + DELETE_AFTER_MS > now;
+  });
+  if (kept.length !== events.length) {
+    events = kept;
+    try { saveEvents(); } catch {}
+  }
+}
+
+// ---------- 表示用 ----------
+const esc = (s) => String(s).replace(/[&<>"']/g, c => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+));
+const md = (d) => `${d.getMonth() + 1}月${d.getDate()}日`;
+const hm = (d) => `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+function formatPeriod(startAt, endAt) {
+  const s = new Date(startAt), e = new Date(endAt);
+  return s.toDateString() === e.toDateString()
+    ? `${md(s)} ${hm(s)}〜${hm(e)}`
+    : `${md(s)}〜<br>${md(e)}`;
+}
+
+function statusOf(ev, now = new Date()) {
+  if (new Date(ev.endAt) < now) return 'ended';
+  return new Date(ev.startAt) <= now ? 'ongoing' : 'upcoming';
+}
+
+const TAB_LABEL = { ongoing: '開催中の', upcoming: '予定の', ended: '終了した' };
+
+function cardHtml(ev) {
+  const ended = statusOf(ev) === 'ended';
+  const img = ev.image
+    ? `<img src="${ev.image}" alt="" class="h-36 w-full object-cover">`
+    : `<div class="h-36 w-full bg-gray-300 flex items-center justify-center text-sm text-gray-700">イベントの画像</div>`;
+  return `
+    <li class="relative overflow-hidden rounded-2xl bg-white shadow-sm border border-brand-100/60 ${ended ? 'opacity-70' : ''}">
+      <button data-delete="${ev.id}" aria-label="削除"
+              class="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 text-white text-sm">×</button>
+      ${img}
+      <div class="px-3 py-2 space-y-1 text-sm">
+        <p class="text-base font-bold">${esc(ev.title)}${ended ? ' <span class="ml-1 align-middle text-[11px] font-normal px-1.5 rounded bg-gray-200 text-gray-500">終了</span>' : ''}</p>
+        <p>日時: ${formatPeriod(ev.startAt, ev.endAt)}</p>
+        <div class="flex items-center justify-between gap-2">
+          <p class="min-w-0 truncate">場所：${esc(ev.placeName)}</p>
+          <button data-nav-to="${esc(ev.placeId)}"
+                  class="px-4 py-1.5 rounded-full bg-white border border-brand-200 text-brand-600 text-sm font-medium shadow-sm active:bg-brand-50 shrink-0">
+            ナビ開始
+          </button>
+        </div>
+      </div>
+    </li>`;
+}
+
+function render() {
+  document.querySelectorAll('[data-tab]').forEach(b => {
+    const on = b.dataset.tab === tab;
+    b.setAttribute('aria-selected', String(on));
+    b.classList.toggle('border-blue-600', on);
+    b.classList.toggle('border-transparent', !on);
+  });
+
+  const now = new Date();
+  const shown = events
+    .filter(ev => statusOf(ev, now) === tab)
+    // 終了タブは新しく終わった順、それ以外は開始が早い順
+    .sort((a, b) => tab === 'ended' ? b.endAt.localeCompare(a.endAt) : a.startAt.localeCompare(b.startAt));
+
+  list.innerHTML = shown.map(cardHtml).join('');
+  const text = shown.length ? '' : `${TAB_LABEL[tab]}イベントはありません`;
+  message.textContent = text;
+  message.classList.toggle('hidden', !text);
+}
+
+// ---------- 場所一覧(既存API) ----------
+async function loadPlaces() {
+  try {
+    const res = await fetch(`${API_BASE}/routes/places`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    places = await res.json();
+    placeSelect.innerHTML = '<option value="">選択してください</option>' +
+      places.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  } catch (err) {
+    console.error('[event] places API error:', err);
+    placeSelect.innerHTML = '<option value="">場所を取得できませんでした</option>';
+  }
+}
+
+// ---------- 画像: 横800pxに縮小して保存容量を抑える ----------
+function resizeImage(file, maxW = 800) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxW / img.width);
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+form.elements.image.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  imageDataUrl = file ? await resizeImage(file) : null;
+  preview.src = imageDataUrl || '';
+  preview.classList.toggle('hidden', !imageDataUrl);
+});
+
+// ---------- 追加 ----------
+function showError(msg) {
+  errEl.textContent = msg;
+  errEl.classList.remove('hidden');
+}
+
+$('#btn-add').addEventListener('click', () => {
+  form.reset();
+  imageDataUrl = null;
+  preview.classList.add('hidden');
+  errEl.classList.add('hidden');
+  if (!places.length) loadPlaces();
+  dialog.showModal();
+});
+
+$('#add-cancel').addEventListener('click', () => dialog.close());
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const fd = new FormData(form);
+  const startAt = String(fd.get('startAt'));
+  const endAt = String(fd.get('endAt'));
+  const placeId = String(fd.get('placeId'));
+
+  if (endAt < startAt) return showError('終了日時は開始日時以降にしてください');
+  const place = places.find(p => String(p.id) === placeId);
+  if (!place) return showError('場所を選択してください');
+
+  const ev = {
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    title: String(fd.get('title')).trim(),
+    startAt, endAt,
+    placeId: place.id,
+    placeName: place.name,
+    image: imageDataUrl,
+  };
+
+  events.push(ev);
+  try {
+    saveEvents();
+  } catch {
+    events.pop();
+    return showError('保存容量が足りません。画像を小さくするか、古いイベントを削除してください');
+  }
+
+  dialog.close();
+  const st = statusOf(ev);
+  tab = st; // 追加したイベントのタブへ
+  render();
+});
+
+// ---------- クリック ----------
+document.addEventListener('click', (e) => {
+  const t = e.target;
+
+  const tabBtn = t.closest('[data-tab]');
+  if (tabBtn) { tab = tabBtn.dataset.tab; render(); return; }
+
+  const navTo = t.closest('[data-nav-to]');
+  if (navTo) {
+    location.href = `${MAP_NAV_PAGE}?to=${encodeURIComponent(navTo.dataset.navTo)}&mode=navigate`;
+    return;
+  }
+
+  const del = t.closest('[data-delete]');
+  if (del) {
+    events = events.filter(ev => ev.id !== del.dataset.delete);
+    saveEvents();
+    render();
+    return;
+  }
+
+  const nav = t.closest('[data-href]');
+  if (nav) { location.href = nav.dataset.href; return; }
+
+  if (t.closest('#btn-back')) {
+    if (history.length > 1) history.back();
+    else location.href = '../home/index.html';
+  }
+});
+
+loadPlaces();
+purgeExpired();
+render();
+// 1分ごとに 自動削除＋タブ振り分け(開催中→終了 など)を更新
+setInterval(() => { purgeExpired(); render(); }, 60_000);
+</script>
+</body>
+</html>
