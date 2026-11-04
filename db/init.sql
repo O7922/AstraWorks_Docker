@@ -121,3 +121,5 @@ INSERT INTO place_node_link (place_id, node_id) VALUES
 (3, 'n5'),  -- 303教室
 (4, 'n6'),  -- 迫真空手部(入口A)
 (4, 'n7');  -- 迫真空手部(入口B)
+
+■長坂開発領域
