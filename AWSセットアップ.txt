@@ -127,3 +127,18 @@ docker compose ps
 curl -k -I --max-time 15 https://localhost/ || true
 
 echo "===== SETUP COMPLETED ====="
+
+
+
+# MyDNS IPアドレス更新
+dnf install -y curl
+
+# IPv4アドレスをMyDNSへ通知
+curl -fsS -u 'mydns004428:A2mtEqXDSE8' \
+  https://ipv4.mydns.jp/login.html
+
+cat > /etc/cron.d/mydns-update <<'EOF'
+*/5 * * * * root curl -fsS -u 'mydns004428:A2mtEqXDSE8' https://ipv4.mydns.jp/login.html >/dev/null 2>&1
+EOF
+
+chmod 600 /etc/cron.d/mydns-update
