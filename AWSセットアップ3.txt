@@ -1,0 +1,196 @@
+#!/bin/bash
+set -Eeuo pipefail
+exec > >(tee -a /var/log/user-data-setup.log) 2>&1
+trap 'echo "ERROR: line ${LINENO}, exit code $?"' ERR
+
+echo "===== 1. Install packages ====="
+dnf install -y httpd mod_ssl openssl git docker python3 curl-minimal
+
+echo "===== 2. SSL certificate ====="
+TOKEN=$(curl -fsS -X PUT \
+  "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" || true)
+
+PUBLIC_IP=""
+if [ -n "$TOKEN" ]; then
+  PUBLIC_IP=$(curl -fsS \
+    -H "X-aws-ec2-metadata-token: $TOKEN" \
+    http://169.254.169.254/latest/meta-data/public-ipv4 || true)
+fi
+
+PRIVATE_IP=$(hostname -I | awk '{print $1}')
+CERT_IP=${PUBLIC_IP:-$PRIVATE_IP}
+
+mkdir -p /etc/httpd/ssl
+openssl req -x509 -nodes -days 365 \
+  -newkey rsa:2048 \
+  -keyout /etc/httpd/ssl/server.key \
+  -out /etc/httpd/ssl/server.crt \
+  -subj "/CN=${CERT_IP}" \
+  -addext "subjectAltName=IP:${CERT_IP},IP:${PRIVATE_IP},DNS:localhost"
+
+chmod 600 /etc/httpd/ssl/server.key
+
+echo "===== 3. Apache configuration ====="
+
+# Apacheの80番待受を停止（Dockerが使用）
+sed -i -E \
+  's/^[[:space:]]*Listen[[:space:]]+80([[:space:]]*)$/# Listen 80 disabled for Docker/' \
+  /etc/httpd/conf/httpd.conf
+
+# Apache標準のSSL VirtualHostを削除
+python3 - <<'PY'
+import re
+
+p = "/etc/httpd/conf.d/ssl.conf"
+
+try:
+    s = open(p).read()
+    s = re.sub(
+        r'<VirtualHost _default_:443>.*?</VirtualHost>',
+        '',
+        s,
+        flags=re.S
+    )
+    open(p, 'w').write(s)
+except FileNotFoundError:
+    pass
+PY
+
+# 3333番ポートの待受を追加
+cat > /etc/httpd/conf.d/listen-3333.conf <<'EOF'
+Listen 3333
+EOF
+
+# リバースプロキシ設定
+cat > /etc/httpd/conf.d/reverseproxy.conf <<EOF
+# ==========================================
+# HTTPS :443
+# Web + API
+# ==========================================
+
+<VirtualHost *:443>
+
+    ServerName ${CERT_IP}
+
+    SSLEngine on
+    SSLCertificateFile /etc/httpd/ssl/server.crt
+    SSLCertificateKeyFile /etc/httpd/ssl/server.key
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    # APIサーバ（3000番）
+    ProxyPass        /routes/ http://127.0.0.1:3000/routes/
+    ProxyPassReverse /routes/ http://127.0.0.1:3000/routes/
+
+    # Webサーバ（80番）
+    ProxyPass        / http://127.0.0.1:80/
+    ProxyPassReverse / http://127.0.0.1:80/
+
+    ErrorLog /var/log/httpd/reverse_error.log
+    CustomLog /var/log/httpd/reverse_access.log combined
+
+</VirtualHost>
+
+
+# ==========================================
+# HTTPS :3333
+# API専用
+# ==========================================
+
+<VirtualHost *:3333>
+
+    ServerName ${CERT_IP}
+
+    SSLEngine on
+    SSLCertificateFile /etc/httpd/ssl/server.crt
+    SSLCertificateKeyFile /etc/httpd/ssl/server.key
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    # APIサーバ（3000番）
+    ProxyPass        /routes/ http://127.0.0.1:3000/routes/
+    ProxyPassReverse /routes/ http://127.0.0.1:3000/routes/
+
+    ErrorLog /var/log/httpd/route3333_error.log
+    CustomLog /var/log/httpd/route3333_access.log combined
+
+</VirtualHost>
+EOF
+
+# Apache設定チェック
+httpd -t
+
+# 必要なモジュールの確認
+httpd -M | grep -q ssl_module
+httpd -M | grep -q proxy_module
+httpd -M | grep -q proxy_http_module
+echo "===== 4. Docker setup ====="
+systemctl enable --now docker
+usermod -aG docker ec2-user
+
+echo "===== 5. Clone application ====="
+cd /home/ec2-user
+
+if [ ! -d AstraWorks_Docker/.git ]; then
+  git clone https://github.com/O7922/AstraWorks_Docker.git
+else
+  git -C AstraWorks_Docker pull origin master
+fi
+
+cd /home/ec2-user/AstraWorks_Docker
+
+echo "===== 6. Docker Compose setup ====="
+ARCH=$(uname -m)
+
+case "$ARCH" in
+  x86_64)  COMPOSE_ARCH=x86_64 ;;
+  aarch64) COMPOSE_ARCH=aarch64 ;;
+  *)
+    echo "Unsupported architecture: $ARCH"
+    exit 1
+    ;;
+esac
+
+mkdir -p /usr/local/lib/docker/cli-plugins
+
+# AL2023標準Buildxとの互換性を考慮してComposeを固定
+COMPOSE_VERSION="v2.39.4"
+
+curl -fL --retry 3 \
+  "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-${COMPOSE_ARCH}" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+docker compose version
+docker buildx version
+
+echo "===== 7. Start application ====="
+docker compose up -d --build
+
+echo "===== 8. Start Apache HTTPS ====="
+systemctl enable --now httpd
+
+echo "===== 9. Verify ====="
+docker compose ps
+curl -k -I --max-time 15 https://localhost/ || true
+
+echo "===== SETUP COMPLETED ====="
+
+
+
+# MyDNS IPアドレス更新
+dnf install -y curl
+
+# IPv4アドレスをMyDNSへ通知
+curl -fsS -u 'mydns004428:A2mtEqXDSE8' \
+  https://ipv4.mydns.jp/login.html
+
+cat > /etc/cron.d/mydns-update <<'EOF'
+*/5 * * * * root curl -fsS -u 'mydns004428:A2mtEqXDSE8' https://ipv4.mydns.jp/login.html >/dev/null 2>&1
+EOF
+
+chmod 600 /etc/cron.d/mydns-update
