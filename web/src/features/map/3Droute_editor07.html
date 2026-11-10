@@ -115,6 +115,8 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
+// 平行移動の感度
+controls.panSpeed = 3.0;
 
 // ---------- ホイールズームの鈍化対策 ----------
 controls.enableZoom = false;
@@ -204,8 +206,8 @@ const NODE_MAT = new THREE.MeshBasicMaterial({color:0x00ff88});          // 施�
 const NODE_MAT_HAS = new THREE.MeshBasicMaterial({color:0xff9900});      // 施設登録済み
 const NODE_MAT_SEL = new THREE.MeshBasicMaterial({color:0xffcc00});      // 選択中
 const LINK_MAT = new THREE.MeshBasicMaterial({color:0x3b7ddd});
-const REAL_RADIUS = 0.5;
-const REAL_LINK_R = 0.15;
+const REAL_RADIUS = 4.0;
+const REAL_LINK_R = 1.2;
 const SCREEN_K = 0.012;
 
 function addNode(pos, forceId=null){
