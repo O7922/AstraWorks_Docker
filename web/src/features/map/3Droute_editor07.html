@@ -94,6 +94,9 @@ import { TransformControls } from
 import { GLTFLoader } from
     "./three/examples/jsm/loaders/GLTFLoader.js";
 
+import { DRACOLoader } from
+    "./three/examples/jsm/loaders/DRACOLoader.js";
+
 const $ = id => document.getElementById(id);
 const statusEl = $("status");
 const setStatus = s => statusEl.textContent = s;
@@ -155,7 +158,14 @@ scene.add(dLight);
 
 // ---------- 地形(terrain) ----------
 let terrain = null;
-new GLTFLoader().load("mapData.glb", gltf => {
+
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath("./three/examples/jsm/libs/draco/gltf/");
+
+const gltfLoader = new GLTFLoader();
+gltfLoader.setDRACOLoader(dracoLoader);
+
+gltfLoader.load("ジオメトリ3.glb", gltf => {
   terrain = gltf.scene;
   scene.add(terrain);
   const box = new THREE.Box3().setFromObject(terrain);
