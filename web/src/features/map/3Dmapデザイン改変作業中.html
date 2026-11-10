@@ -7,13 +7,13 @@
 
 <style>
 :root {
-    --blue: #1a73e8;
-    --teal: #00798c;
-    --ink: #202124;
-    --sub: #5f6368;
-    --line: #dadce0;
-    --surface: #ffffff;
-    --chip: #e8f0fe;
+    --blue: #AE6DD6;    /* メインの紫 */
+    --teal: #CA80CA;    /* ボタン用のピンク紫 */
+    --ink: #202124;     /* 文字色 */
+    --sub: #756B75;     /* 補助文字 */
+    --line: #E3DAE2;    /* 境界線 */
+    --surface: #FFFFFF; /* カード・ボタン背景 */
+    --chip: #E3DAE2;    /* 薄い紫グレー */
     --topbar-h: 48px;
     --sheet-h: 150px;
 }
@@ -37,7 +37,7 @@ button { font-family: inherit; }
     z-index: 160;
     display: flex;
     align-items: center;
-    background: var(--surface);
+    background: #EDDDEE;
     box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
 }
 #btnHome {
@@ -64,24 +64,28 @@ button { font-family: inherit; }
     transform: translateX(-50%);
     z-index: 150;
     width: min(92vw, 420px);
-    height: 48px;
+    height: 44px;
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 14px;
     padding: 0 16px;
-    border: none;
-    border-radius: 24px;
-    background: var(--surface);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
-    color: var(--sub);
-    font-size: 16px;
+    border: 1px solid rgba(255, 255, 255, .6);
+    border-radius: 14px;
+    background: #ebe0e8;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+    color: #000;
+    font-size: 18px;
     text-align: left;
     cursor: pointer;
 }
-#searchBar svg { width: 22px; height: 22px; flex: none; }
+#searchBarIcon {
+    flex: none;
+    font-size: 22px;
+    line-height: 1;
+}
 #searchBarText { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#searchBarText.filled { color: var(--ink); }
+#searchBarText.filled { color: #000; }
 
 /* ---------- 情報パネル(デバッグ) ---------- */
 #btnInfo {
@@ -179,14 +183,41 @@ button { font-family: inherit; }
     transition: bottom .2s ease;
 }
 .fab svg { width: 28px; height: 28px; }
-#btnLocate { bottom: 88px; background: var(--surface); color: var(--blue); width: 48px; height: 48px; right: 18px; }
-#btnLocate svg { width: 24px; height: 24px; }
-#btnDest { bottom: 18px; background: var(--teal); color: #fff; }
-#btnLocate:active { background: #e8eaed; }
-#btnDest:active { background: #005f6e; }
+#btnLocate {
+    bottom: 88px;
+    background: #E3DAE2;
+    color: #AE6DD6;
+    width: 48px;
+    height: 48px;
+    right: 18px;
+}
 
-body.guiding #btnLocate { bottom: calc(var(--sheet-h) + 88px); }
-body.guiding #btnDest   { bottom: calc(var(--sheet-h) + 18px); }
+#btnLocate svg {
+    width: 24px;
+    height: 24px;
+}
+
+#btnDest {
+    bottom: 18px;
+    background: #CA80CA;
+    color: #FFFFFF;
+}
+
+#btnLocate:active {
+    background: #D9C9DA;
+}
+
+#btnDest:active {
+    background: #AE6DD6;
+}
+
+body.guiding #btnLocate {
+    bottom: calc(var(--sheet-h) + 88px);
+}
+
+body.guiding #btnDest {
+    bottom: calc(var(--sheet-h) + 18px);
+}
 
 /* ---------- 経路案内シート(アンダー) ---------- */
 #guideSheet {
@@ -415,8 +446,8 @@ body.guiding #btnDest   { bottom: calc(var(--sheet-h) + 18px); }
 
 <!-- 検索バー(場所検索モード) -->
 <button id="searchBar" type="button">
-    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-    <span id="searchBarText">ここで検索</span>
+    <span id="searchBarIcon">🔍</span>
+    <span id="searchBarText">検索</span>
 </button>
 
 <button id="btnInfo" type="button">情報</button>
@@ -474,7 +505,7 @@ body.guiding #btnDest   { bottom: calc(var(--sheet-h) + 18px); }
         <button id="searchScreenBack" class="iconBtn" type="button" aria-label="戻る">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
         </button>
-        <input id="searchScreenInput" type="text" placeholder="ここで検索" autocomplete="off">
+        <input id="searchScreenInput" type="text" placeholder="検索" autocomplete="off">
     </div>
     <div id="searchScreenList" class="screenList"></div>
 </div>
