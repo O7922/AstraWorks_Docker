@@ -224,6 +224,9 @@ import { OrbitControls } from
 import { GLTFLoader } from
     "./three/examples/jsm/loaders/GLTFLoader.js";
 
+import { DRACOLoader } from
+    "./three/examples/jsm/loaders/DRACOLoader.js";
+
 
 //==========================================================
 // GLB内オブジェクトのカスタムプロパティ(緯度経度)を探すためのキー候補
@@ -703,7 +706,7 @@ function findNearestNodeXZ(x, z) {
 // 経路の見た目(板ポリゴンのリボン)
 //==========================================================
 
-const ROUTE_PATH_WIDTH = 5.0;
+const ROUTE_PATH_WIDTH = 10.0;
 const ROUTE_PATH_HEIGHT_OFFSET = 0.08;
 
 const ROUTE_PATH_MAT = new THREE.MeshBasicMaterial({
@@ -1138,13 +1141,18 @@ function updateMarkerScreenPosition() {
 // GLBロード
 //==========================================================
 
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath("./three/examples/jsm/libs/draco/gltf/");
+
 const loader = new GLTFLoader();
+loader.setDRACOLoader(dracoLoader);
 
 loader.load(
     //"gakkou_zahyou03-軽量化2.glb",
     //"マーカーなし!校舎全体図blende20261015.glb",
     //"マーカーなし!校舎全体図blende20261104.glb",
-    "mapData.glb",
+    //"mapData.glb",
+    "ジオメトリ.glb",
 
     gltf => {
 
