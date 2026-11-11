@@ -902,6 +902,9 @@ const PLACE_NODE_API_URL = "https://astrahost.astraworks.mydns.jp:3333/routes/pl
 
 const nodePositions = new Map();
 const adjacency = new Map();
+const nodeComp = new Map(); 
+// ノードごとの「ラベルを置く3D位置」(屋根の高さ)をキャッシュ
+const labelAnchors = new Map(); 
 
 let placesList = [];
 
@@ -953,6 +956,24 @@ async function loadRouteNodes() {
                 }
             });
         });
+
+           nodeComp.clear();
+        let compNo = 0;
+        for (const startId of adjacency.keys()) {
+            if (nodeComp.has(startId)) continue;
+            compNo++;
+            const stack = [startId];
+            nodeComp.set(startId, compNo);
+            while (stack.length) {
+                const cur = stack.pop();
+                for (const e of adjacency.get(cur) || []) {
+                    if (!nodeComp.has(e.id)) {
+                        nodeComp.set(e.id, compNo);
+                        stack.push(e.id);
+                    }
+                }
+            }
+        }
 
         console.log(`ルートデータ読み込み: ノード${nodeList.length}件(非表示・探索用データのみ)`);
     } catch (e) {
@@ -1069,9 +1090,6 @@ const _lblCam = new THREE.Vector3();
 const LABEL_MIN_DEPTH = 0.5;     // カメラに近すぎる点は描かない(m)
 const LABEL_ROOF_MARGIN = 2;     // 屋根からの余白(m)
 const LABEL_SCREEN_MARGIN = 120; // 画面外でもこのpx以内なら描く
-
-// ノードごとの「ラベルを置く3D位置」(屋根の高さ)をキャッシュ
-const labelAnchors = new Map();
 
 function getLabelAnchor(id, pos) {
     let a = labelAnchors.get(id);
