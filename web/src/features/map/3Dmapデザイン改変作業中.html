@@ -432,6 +432,7 @@ body.guiding #btnDest {
 .major-label {
     position: absolute;
     left: 0; top: 0;
+    transform: translate(-50%, -100%);   /* 位置はleft/topで動かす(マーカーと同じ) */
     white-space: nowrap;
     background: rgba(0, 0, 0, .7);
     color: #fff;
@@ -1085,7 +1086,6 @@ async function loadMajorLabels() {
     }
 }
 
-const _lblV = new THREE.Vector3();
 const _lblCam = new THREE.Vector3();
 const LABEL_MIN_DEPTH = 0.5;     // カメラに近すぎる点は描かない(m)
 const LABEL_ROOF_MARGIN = 2;     // 屋根からの余白(m)
@@ -1093,66 +1093,61 @@ const LABEL_SCREEN_MARGIN = 120; // 画面外でもこのpx以内なら描く
 
 const LABEL_SEARCH_RADIUS = 15;  // ノードの周囲この範囲(m)で最も高い所を探す
 const LABEL_SEARCH_STEP   = 3;   // サンプリング間隔(m)
+const LABEL_LIFT = 8;   // 地面(屋根)からラベルまでの高さ(m)
+const _lblV = new THREE.Vector3();
 
+// マーカーと同じ方式: X,Zの真上からレイ → 交点 の少し上
 function getLabelAnchor(id, pos) {
     let a = labelAnchors.get(id);
     if (a) return a;
+    if (!terrain) return new THREE.Vector3(pos.x, pos.y + LABEL_LIFT, pos.z);  // 地形前はキャッシュしない
 
-    if (!terrain) {
-        return new THREE.Vector3(pos.x, pos.y + MAJOR_LABEL_Y_OFFSET, pos.z);
-    }
-
-    let best = null;
-    const R = LABEL_SEARCH_RADIUS, S = LABEL_SEARCH_STEP;
-    for (let dx = -R; dx <= R; dx += S) {
-        for (let dz = -R; dz <= R; dz += S) {
-            if (dx * dx + dz * dz > R * R) continue;
-            const hit = castDown(pos.x + dx, pos.z + dz);
-            if (hit && (!best || hit.y > best.y)) best = hit;
-        }
-    }
-
-    a = best
-        ? new THREE.Vector3(best.x, Math.max(best.y, pos.y) + LABEL_ROOF_MARGIN, best.z)
-        : new THREE.Vector3(pos.x, pos.y + MAJOR_LABEL_Y_OFFSET, pos.z);
-
+    const hit = castDown(pos.x, pos.z);
+    const baseY = hit ? hit.y : pos.y;
+    a = new THREE.Vector3(pos.x, baseY + LABEL_LIFT, pos.z);
     labelAnchors.set(id, a);
     return a;
 }
 
+// 確認用の表示(情報パネルの下)
+const lblDebug = document.createElement("div");
+lblDebug.style.cssText = "margin-top:3px;font-size:8px;color:#8ff;white-space:pre-line";
+infoPanel.appendChild(lblDebug);
+let _dbgCount = 0;
+
 function updateLabels() {
     if (!labelEls.size) return;
-    camera.updateMatrixWorld();
-    const w = innerWidth, h = innerHeight;
+    camera.updateMatrixWorld(true);
 
+    let first = true;
     for (const [id, el] of labelEls) {
         const pos = nodePositions.get(id);
         if (!pos) { el.style.display = "none"; continue; }
 
-        _lblV.copy(getLabelAnchor(id, pos));
+        const anchor = getLabelAnchor(id, pos);
+        _lblV.copy(anchor).project(camera);
 
-        // カメラの後ろ・近すぎる点は描かない
-        _lblCam.copy(_lblV).applyMatrix4(camera.matrixWorldInverse);
-        if (-_lblCam.z < LABEL_MIN_DEPTH) { el.style.display = "none"; continue; }
+        // カメラの後ろだけ隠す
+        if (_lblV.z > 1) { el.style.display = "none"; continue; }
 
-        _lblV.project(camera);
-
-        const sx = (_lblV.x * 0.5 + 0.5) * w;
-        const sy = (-_lblV.y * 0.5 + 0.5) * h;
-
-        // ピクセル基準で画面外を判定(下側は少し余裕を多めに)
-        if (sx < -LABEL_SCREEN_MARGIN || sx > w + LABEL_SCREEN_MARGIN ||
-            sy < -LABEL_SCREEN_MARGIN || sy > h + LABEL_SCREEN_MARGIN) {
-            el.style.display = "none";
-            continue;
-        }
+        const sx = (_lblV.x * 0.5 + 0.5) * innerWidth;
+        const sy = (-_lblV.y * 0.5 + 0.5) * innerHeight;
 
         el.style.display = "block";
-        el.style.transform =
-            `translate(${sx}px,${sy}px) translate(-50%,-100%)`;
+        el.style.left = `${sx}px`;
+        el.style.top  = `${sy}px`;
+
+        if (first && ++_dbgCount % 10 === 0) {
+            lblDebug.textContent =
+                `L:${el.textContent}\n` +
+                `node ${pos.x.toFixed(1)},${pos.y.toFixed(1)},${pos.z.toFixed(1)}\n` +
+                `anch ${anchor.x.toFixed(1)},${anchor.y.toFixed(1)},${anchor.z.toFixed(1)}\n` +
+                `cam  ${camera.position.x.toFixed(0)},${camera.position.y.toFixed(0)},${camera.position.z.toFixed(0)}\n` +
+                `scr  ${sx.toFixed(0)},${sy.toFixed(0)} z${_lblV.z.toFixed(4)}`;
+        }
+        first = false;
     }
 }
-
 //==========================================================
 // 最短経路探索(ダイクストラ法・ヒープ版)
 //==========================================================
@@ -2036,9 +2031,9 @@ window.addEventListener("resize", () => {
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
-    if (hasIntersection) updateMarkerScreenPosition();
-    updateLabels();             
     renderer.render(scene, camera);
+    if (hasIntersection) updateMarkerScreenPosition();
+    updateLabels();
 }
 
 animate();
