@@ -1,0 +1,2067 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GPS 3D Position Viewer</title>
+
+<style>
+:root {
+    --blue: #AE6DD6;    /* メインの紫 */
+    --teal: #CA80CA;    /* ボタン用のピンク紫 */
+    --ink: #202124;     /* 文字色 */
+    --sub: #756B75;     /* 補助文字 */
+    --line: #E3DAE2;    /* 境界線 */
+    --surface: #FFFFFF; /* カード・ボタン背景 */
+    --chip: #E3DAE2;    /* 薄い紫グレー */
+    --topbar-h: 48px;
+    --sheet-h: 150px;
+}
+
+html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #111;
+    font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+}
+
+button { font-family: inherit; }
+
+/* ---------- トップバー ---------- */
+#topBar {
+    position: absolute;
+    left: 0; top: 0; right: 0;
+    height: var(--topbar-h);
+    z-index: 160;
+    display: flex;
+    align-items: center;
+    background: #EDDDEE;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+}
+#btnHome {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 100%;
+    padding: 0 16px 0 12px;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+}
+#btnHome:active { background: #eee; }
+#btnHome svg { width: 22px; height: 22px; }
+
+/* ---------- 検索バー(場所検索モード) ---------- */
+#searchBar {
+    position: absolute;
+    left: 50%;
+    top: calc(var(--topbar-h) + 10px);
+    transform: translateX(-50%);
+    z-index: 150;
+    width: min(92vw, 420px);
+    height: 44px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 16px;
+    border: 1px solid rgba(255, 255, 255, .6);
+    border-radius: 14px;
+    background: #ebe0e8;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+    color: #000;
+    font-size: 18px;
+    text-align: left;
+    cursor: pointer;
+}
+#searchBarIcon {
+    flex: none;
+    font-size: 22px;
+    line-height: 1;
+}
+#searchBarText { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#searchBarText.filled { color: #000; }
+
+/* ---------- 情報パネル(デバッグ) ---------- */
+#btnInfo {
+    position: absolute;
+    left: 10px;
+    top: calc(var(--topbar-h) + 70px);
+    z-index: 100;
+    background: rgba(255, 255, 255, .9);
+    color: var(--sub);
+    border: none;
+    border-radius: 14px;
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+}
+
+#ui {
+    position: absolute;
+    left: 10px;
+    top: calc(var(--topbar-h) + 100px);
+    z-index: 100;
+    display: none;
+    color: #fff;
+    background: rgba(0, 0, 0, .65);
+    padding: 3px 4px;
+    border-radius: 6px;
+    font-size: 9px;
+    line-height: 1.2;
+    max-width: 130px;
+}
+#ui.open { display: block; }
+
+#ui #info { white-space: pre-line; }
+
+#gpsCoords {
+    margin-bottom: 3px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid #444;
+    word-break: break-all;
+    font-size: 9px;
+}
+
+#ui .row {
+    margin-top: 3px;
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+}
+
+#ui button {
+    background: #333;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 8px;
+    cursor: pointer;
+}
+
+#ui button#btnGPSRetry { background: #245b3a; border-color: #4caf50; }
+#ui button:active { background: #555; }
+#ui button#btnRoute { background: #7a4a00; border-color: #ffb300; }
+#ui button#btnRoute:active { background: #a56400; }
+
+#manualControls { margin-top: 3px; display: none; }
+#manualControls.visible { display: block; }
+#manualControls input { width: 100%; }
+
+#routeInfo {
+    margin-top: 3px;
+    white-space: pre-line;
+    font-size: 8px;
+    color: #ffd54a;
+    border-top: 1px solid #444;
+    padding-top: 3px;
+    display: none;
+}
+#routeInfo.visible { display: block; }
+
+/* ---------- 右下ボタン(現在地 / 行き先) ---------- */
+.fab {
+    position: absolute;
+    right: 14px;
+    z-index: 120;
+    width: 56px;
+    height: 56px;
+    border: none;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .5);
+    transition: bottom .2s ease;
+}
+.fab svg { width: 28px; height: 28px; }
+#btnLocate {
+    bottom: 88px;
+    background: #E3DAE2;
+    color: #AE6DD6;
+    width: 48px;
+    height: 48px;
+    right: 18px;
+}
+
+#btnLocate svg {
+    width: 24px;
+    height: 24px;
+}
+
+#btnDest {
+    bottom: 18px;
+    background: #CA80CA;
+    color: #FFFFFF;
+}
+
+#btnLocate:active {
+    background: #D9C9DA;
+}
+
+#btnDest:active {
+    background: #AE6DD6;
+}
+
+body.guiding #btnLocate {
+    bottom: calc(var(--sheet-h) + 88px);
+}
+
+body.guiding #btnDest {
+    bottom: calc(var(--sheet-h) + 18px);
+}
+
+/* ---------- 経路案内シート(アンダー) ---------- */
+#guideSheet {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    z-index: 130;
+    box-sizing: border-box;
+    min-height: var(--sheet-h);
+    padding: 8px 20px 18px;
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, .35);
+    color: var(--ink);
+    display: none;
+}
+#guideSheet.visible { display: block; }
+#guideHandle {
+    width: 56px; height: 6px;
+    margin: 0 auto 12px;
+    border-radius: 3px;
+    background: #cfd2d6;
+}
+#guideRow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+#guideRow svg { width: 34px; height: 34px; flex: none; color: #3c4043; }
+#guideTime { font-size: 17px; flex: 1; }
+#guideDist { font-size: 17px; }
+#guideText {
+    margin-top: 12px;
+    font-size: 17px;
+    line-height: 1.5;
+}
+#btnGuideEnd {
+    margin-top: 10px;
+    padding: 6px 14px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: #fff;
+    color: var(--sub);
+    font-size: 13px;
+    cursor: pointer;
+}
+#btnGuideEnd:active { background: #eee; }
+
+/* ---------- 全画面の入力画面(共通) ---------- */
+.screen {
+    position: absolute;
+    inset: 0;
+    z-index: 300;
+    display: none;
+    flex-direction: column;
+    background: var(--surface);
+    color: var(--ink);
+}
+.screen.visible { display: flex; }
+
+.screenList {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.placeItem {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 18px;
+    border-bottom: 1px solid #eceff1;
+    font-size: 17px;
+    cursor: pointer;
+}
+.placeItem:active { background: var(--chip); }
+.placeItem.selected { background: var(--chip); }
+.placeItem .pin {
+    flex: none;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: #e8eaed;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--sub);
+}
+.placeItem .pin svg { width: 22px; height: 22px; }
+.placeItem.empty { color: #888; cursor: default; justify-content: center; }
+.placeItem.empty:active { background: transparent; }
+
+/* 場所検索画面 */
+#searchScreenHead {
+    margin: 10px 12px 6px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px 0 4px;
+    border-radius: 26px;
+    background: #f1f3f4;
+}
+.iconBtn {
+    flex: none;
+    width: 40px; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+}
+.iconBtn:active { background: #dadce0; }
+.iconBtn svg { width: 24px; height: 24px; }
+#searchScreenInput {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 18px;
+    color: var(--ink);
+    font-family: inherit;
+}
+
+/* 経路入力画面 */
+#routeScreenHead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 12px 14px 4px;
+    border-bottom: 1px solid var(--line);
+}
+#routeFields { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.routeField {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 48px;
+    box-sizing: border-box;
+    padding: 0 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #fff;
+}
+.routeField .dot {
+    flex: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--blue);
+    box-shadow: 0 0 0 5px #e8f0fe;
+}
+.routeField svg { width: 20px; height: 20px; flex: none; color: #d93025; }
+.routeField.from { color: var(--blue); font-size: 18px; }
+#destInput {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 18px;
+    color: var(--ink);
+    font-family: inherit;
+}
+#destInput::placeholder { color: #80868b; }
+
+/* ---------- マーカー / ロード / トースト ---------- */
+#marker {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #ff3b3b;
+    border: 2px solid white;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 99;
+    box-shadow: 0 0 8px black;
+    display: none;
+}
+
+#loading {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 20px;
+    z-index: 200;
+}
+
+#toast {
+    position: absolute;
+    left: 50%;
+    bottom: 120px;
+    transform: translateX(-50%);
+    z-index: 400;
+    max-width: 80vw;
+    padding: 10px 16px;
+    border-radius: 8px;
+    background: rgba(32, 33, 36, .92);
+    color: #fff;
+    font-size: 14px;
+    display: none;
+}
+#toast.visible { display: block; }
+/* ---------- 主要建物の常時ラベル ---------- */
+#labelLayer {
+    position: absolute;
+    left: 0; top: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 50;
+}
+.major-label {
+    position: absolute;
+    left: 0; top: 0;
+    transform: translate(-50%, -100%);   /* 位置はleft/topで動かす(マーカーと同じ) */
+    white-space: nowrap;
+    background: rgba(0, 0, 0, .7);
+    color: #fff;
+    border: 1px solid #ff9900;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    text-shadow: 0 0 2px #000;
+}
+
+/* ---------- 入力欄の×(クリア)ボタン ---------- */
+.clearBtn {
+    flex: none;
+    width: 32px; height: 32px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--sub);
+    cursor: pointer;
+}
+.clearBtn.visible { display: flex; }
+.clearBtn:active { background: #dadce0; }
+.clearBtn svg { width: 20px; height: 20px; }
+</style>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "./three/three.module.js"
+    }
+}
+</script>
+
+</head>
+
+<body>
+
+<div id="loading">Loading GLB...</div>
+
+<!-- トップバー -->
+<div id="topBar">
+    <button id="btnHome" type="button">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        屋外画面
+    </button>
+</div>
+
+<!-- 検索バー(場所検索モード) -->
+<button id="searchBar" type="button">
+    <span id="searchBarIcon">🔍</span>
+    <span id="searchBarText">検索</span>
+</button>
+
+<button id="btnInfo" type="button">情報</button>
+
+<div id="ui">
+    <div id="gpsCoords">
+        緯度: <span id="lat">---</span><br>
+        経度: <span id="lon">---</span>
+    </div>
+
+    <div id="info">GPS待機中</div>
+
+    <div class="row">
+        <button id="btnMode">手動モードに切替</button>
+        <button id="btnGPSRetry" title="位置情報の取得を再試行">GPS再試行</button>
+    </div>
+
+    <div class="row">
+        <button id="btnRoute">ルート解除</button>
+    </div>
+
+    <div id="manualControls">
+        <div>X<br><input id="sx" type="range" min="-100" max="100" step="0.1" value="0"></div>
+        <div>Z<br><input id="sz" type="range" min="-100" max="100" step="0.1" value="0"></div>
+    </div>
+
+    <div id="routeInfo"></div>
+</div>
+
+<div id="marker"></div>
+<div id="labelLayer"></div>
+
+<!-- 右下: 現在地 / 行き先 -->
+<button id="btnLocate" class="fab" type="button" title="現在地にカメラを合わせる" aria-label="現在地">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
+</button>
+<button id="btnDest" class="fab" type="button" title="行き先を指定して経路案内" aria-label="行き先">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>
+</button>
+
+<!-- 経路案内シート -->
+<div id="guideSheet">
+    <div id="guideHandle"></div>
+    <div id="guideRow">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7z"/></svg>
+        <div id="guideTime">あと--分</div>
+        <div id="guideDist">残り--m</div>
+    </div>
+    <div id="guideText">経路を計算しています…</div>
+    <button id="btnGuideEnd" type="button">案内を終了</button>
+</div>
+
+<!-- 場所検索画面(建物検索モード) -->
+<div id="searchScreen" class="screen">
+    <div id="searchScreenHead">
+        <button id="searchScreenBack" class="iconBtn" type="button" aria-label="戻る">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
+        <input id="searchScreenInput" type="text" placeholder="検索" autocomplete="off">
+        <button id="searchScreenClear" class="clearBtn" type="button" aria-label="入力を消す">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+    </div>
+    <div id="searchScreenList" class="screenList"></div>
+</div>
+
+<!-- 目的地入力画面(経路案内モード) -->
+<div id="routeScreen" class="screen">
+    <div id="routeScreenHead">
+        <button id="routeScreenBack" class="iconBtn" type="button" aria-label="戻る">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
+        <div id="routeFields">
+            <div class="routeField from"><span class="dot"></span>現在地</div>
+            <div class="routeField">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
+                <input id="destInput" type="text" placeholder="目的地を入力" autocomplete="off">
+                <button id="destClear" class="clearBtn" type="button" aria-label="入力を消す">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    <div id="routeScreenList" class="screenList"></div>
+</div>
+
+<div id="toast"></div>
+
+<script type="module">
+
+import * as THREE from "three";
+
+import { OrbitControls } from
+    "./three/examples/jsm/controls/OrbitControls.js";
+
+import { GLTFLoader } from
+    "./three/examples/jsm/loaders/GLTFLoader.js";
+
+import { DRACOLoader } from
+    "./three/examples/jsm/loaders/DRACOLoader.js";
+
+
+//==========================================================
+// 設定値
+//==========================================================
+
+// 「← 屋外画面」を押したときに戻るホーム画面のURL(環境に合わせて変更)
+const HOME_URL = "index.html";
+
+// 経路案内の曲がり角判定(度)
+const TURN_STRAIGHT_DEG = 35;   // これ未満は直線扱い
+const TURN_CORNER_DEG   = 75;   // これ以上は右折/左折、間は「曲がり角」扱い
+const TURN_WINDOW_M     = 5;    // 角度を測るときに前後を見る距離(m)
+const WALK_SPEED_M_PER_MIN = 80; // 徒歩の速さ(m/分)
+
+
+//==========================================================
+// GLB内オブジェクトのカスタムプロパティ(緯度経度)を探すためのキー候補
+//==========================================================
+
+const LEFTTOP_LAT_KEYS = ["GPS_LeftTopLat", "lat", "Lat", "LAT", "latitude", "Latitude"];
+const LEFTTOP_LON_KEYS = ["GPS_LeftTopLon", "lon", "Lon", "LON", "lng", "longitude", "Longitude"];
+const RIGHTBOTTOM_LAT_KEYS = ["GPS_RightBottomLat", "lat", "Lat", "LAT", "latitude", "Latitude"];
+const RIGHTBOTTOM_LON_KEYS = ["GPS_RightBottomLon", "lon", "Lon", "LON", "lng", "longitude", "Longitude"];
+
+function findUserDataValue(userData, candidates) {
+    if (!userData) return null;
+
+    const keys = Object.keys(userData);
+    for (const key of candidates) {
+        const actualKey = keys.find(k => k.toLowerCase() === key.toLowerCase());
+        if (actualKey === undefined) continue;
+        const value = Number(userData[actualKey]);
+        if (Number.isFinite(value)) return value;
+    }
+    return null;
+}
+
+function findUserDataValueDeep(obj, candidates) {
+    const direct = findUserDataValue(obj.userData, candidates);
+    if (direct !== null) return direct;
+
+    let found = null;
+    obj.traverse(child => {
+        if (found !== null) return;
+        if (child === obj) return;
+        const v = findUserDataValue(child.userData, candidates);
+        if (v !== null) found = v;
+    });
+
+    return found;
+}
+
+function dumpUserData(obj) {
+    const result = {};
+    obj.traverse(child => {
+        if (child.userData && Object.keys(child.userData).length > 0) {
+            result[child.name || "(no name)"] = child.userData;
+        }
+    });
+    console.log("userData一覧:", JSON.stringify(result, null, 2));
+}
+
+
+//==========================================================
+// 基準点(GPS <-> ワールド座標の対応)
+//==========================================================
+
+let GPS_LeftTopLat = null;
+let GPS_LeftTopLon = null;
+let GPS_RightBottomLat = null;
+let GPS_RightBottomLon = null;
+
+let MAP_LeftTopLat = null;
+let MAP_LeftTopLon = null;
+let MAP_RightBottomLat = null;
+let MAP_RightBottomLon = null;
+
+let keisuuX = null;
+let keisuuY = null;
+
+let referenceReady = false;
+
+
+function setupReferencePoints(gltfScene) {
+
+    const leftTopObj = gltfScene.getObjectByName("LeftTop");
+    const rightBottomObj = gltfScene.getObjectByName("RightBottom");
+
+    if (!leftTopObj || !rightBottomObj) {
+        info.textContent =
+            "エラー: LeftTop / RightBottom オブジェクトがGLB内に見つかりません";
+        console.error("LeftTop または RightBottom オブジェクトが見つかりません");
+        return false;
+    }
+
+    gltfScene.updateMatrixWorld(true);
+
+    const leftTopWorldPos = new THREE.Vector3();
+    leftTopObj.getWorldPosition(leftTopWorldPos);
+
+    const rightBottomWorldPos = new THREE.Vector3();
+    rightBottomObj.getWorldPosition(rightBottomWorldPos);
+
+    MAP_LeftTopLon = leftTopWorldPos.x;
+    MAP_LeftTopLat = leftTopWorldPos.z;
+    MAP_RightBottomLon = rightBottomWorldPos.x;
+    MAP_RightBottomLat = rightBottomWorldPos.z;
+
+    GPS_LeftTopLat = findUserDataValueDeep(leftTopObj, LEFTTOP_LAT_KEYS);
+    GPS_LeftTopLon = findUserDataValueDeep(leftTopObj, LEFTTOP_LON_KEYS);
+    GPS_RightBottomLat = findUserDataValueDeep(rightBottomObj, RIGHTBOTTOM_LAT_KEYS);
+    GPS_RightBottomLon = findUserDataValueDeep(rightBottomObj, RIGHTBOTTOM_LON_KEYS);
+
+    if (
+        GPS_LeftTopLat === null || GPS_LeftTopLon === null ||
+        GPS_RightBottomLat === null || GPS_RightBottomLon === null
+    ) {
+        info.textContent =
+            "エラー: LeftTop / RightBottom のカスタムプロパティ(緯度経度)が読み取れません。" +
+            "コンソールのuserData一覧を確認してください。";
+        console.error("カスタムプロパティが見つかりません。");
+        dumpUserData(leftTopObj);
+        dumpUserData(rightBottomObj);
+        return false;
+    }
+
+    const gpsLonSpan = GPS_RightBottomLon - GPS_LeftTopLon;
+    const gpsLatSpan = GPS_RightBottomLat - GPS_LeftTopLat;
+    if (Math.abs(gpsLonSpan) < 1e-12 || Math.abs(gpsLatSpan) < 1e-12) {
+        info.textContent = "エラー: 基準点の緯度または経度が同じ値です。GLBのGPSプロパティを確認してください。";
+        console.error("基準点の緯度経度の差が0です", { gpsLonSpan, gpsLatSpan });
+        return false;
+    }
+    keisuuX = (MAP_RightBottomLon - MAP_LeftTopLon) / gpsLonSpan;
+    keisuuY = (MAP_RightBottomLat - MAP_LeftTopLat) / gpsLatSpan;
+    if (!Number.isFinite(keisuuX) || !Number.isFinite(keisuuY)) {
+        info.textContent = "エラー: GPS座標と地図座標の変換係数を計算できません。";
+        console.error("変換係数が不正です", { keisuuX, keisuuY });
+        return false;
+    }
+
+    console.log("基準点セットアップ完了", {
+        GPS_LeftTopLat, GPS_LeftTopLon, GPS_RightBottomLat, GPS_RightBottomLon,
+        MAP_LeftTopLat, MAP_LeftTopLon, MAP_RightBottomLat, MAP_RightBottomLon
+    });
+
+    return true;
+}
+
+
+function gpsToWorld(lat, lon) {
+    const x = MAP_LeftTopLon + (lon - GPS_LeftTopLon) * keisuuX;
+    const z = MAP_LeftTopLat + (lat - GPS_LeftTopLat) * keisuuY;
+    return { x, z };
+}
+
+
+//==========================
+// DOM
+//==========================
+
+const info = document.getElementById("info");
+const marker = document.getElementById("marker");
+const loading = document.getElementById("loading");
+
+const btnMode = document.getElementById("btnMode");
+const btnGPSRetry = document.getElementById("btnGPSRetry");
+const btnRoute = document.getElementById("btnRoute");
+const btnLocate = document.getElementById("btnLocate");
+const btnDest = document.getElementById("btnDest");
+const btnHome = document.getElementById("btnHome");
+const btnInfo = document.getElementById("btnInfo");
+const infoPanel = document.getElementById("ui");
+const manualControls = document.getElementById("manualControls");
+const routeInfo = document.getElementById("routeInfo");
+const sxInput = document.getElementById("sx");
+const szInput = document.getElementById("sz");
+
+const searchBar = document.getElementById("searchBar");
+const searchBarText = document.getElementById("searchBarText");
+
+const searchScreen = document.getElementById("searchScreen");
+const searchScreenBack = document.getElementById("searchScreenBack");
+const searchScreenInput = document.getElementById("searchScreenInput");
+const searchScreenList = document.getElementById("searchScreenList");
+
+const routeScreen = document.getElementById("routeScreen");
+const routeScreenBack = document.getElementById("routeScreenBack");
+const destInput = document.getElementById("destInput");
+const searchScreenClear = document.getElementById("searchScreenClear");
+const destClear = document.getElementById("destClear");
+const routeScreenList = document.getElementById("routeScreenList");
+
+const guideSheet = document.getElementById("guideSheet");
+const guideTime = document.getElementById("guideTime");
+const guideDist = document.getElementById("guideDist");
+const guideText = document.getElementById("guideText");
+const btnGuideEnd = document.getElementById("btnGuideEnd");
+
+const toastEl = document.getElementById("toast");
+
+const latEl = document.getElementById("lat");
+const lonEl = document.getElementById("lon");
+
+let manualMode = false;
+
+btnMode.addEventListener("click", () => {
+    manualMode = !manualMode;
+    btnMode.textContent = manualMode ? "GPSモードに切替" : "手動モードに切替";
+    manualControls.classList.toggle("visible", manualMode);
+    if (manualMode) updatePositionFromManual();
+});
+
+sxInput.addEventListener("input", updatePositionFromManual);
+szInput.addEventListener("input", updatePositionFromManual);
+
+btnInfo.addEventListener("click", () => infoPanel.classList.toggle("open"));
+
+btnHome.addEventListener("click", () => {
+    location.href = HOME_URL;
+});
+
+let toastTimer = null;
+function showToast(text) {
+    toastEl.textContent = text;
+    toastEl.classList.add("visible");
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("visible"), 2500);
+}
+
+
+//==========================================================
+// Three.js セットアップ
+//==========================================================
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x222222);
+
+const camera = new THREE.PerspectiveCamera(
+    45,
+    innerWidth / innerHeight,
+    0.1,
+    10000
+);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = false;
+
+const offset = new THREE.Vector3();
+
+controls.addEventListener("change", () => {
+    offset.subVectors(camera.position, controls.target);
+});
+
+scene.add(new THREE.AmbientLight(0xffffff, 2));
+const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+directionalLight.position.set(100, 200, 100);
+scene.add(directionalLight);
+
+
+//==========================================================
+// 軌跡(固定バッファを使い回す。ジオメトリの作り直しはしない)
+//==========================================================
+
+const traceMaterial = new THREE.LineBasicMaterial({ color: 0xff3b3b });
+const MAX_TRACE_POINTS = 5000;
+const tracePositions = new Float32Array(MAX_TRACE_POINTS * 3);
+let traceCount = 0;
+let lastTracePoint = null;
+
+const traceGeometry = new THREE.BufferGeometry();
+traceGeometry.setAttribute("position", new THREE.BufferAttribute(tracePositions, 3));
+traceGeometry.setDrawRange(0, 0);
+
+const traceLine = new THREE.Line(traceGeometry, traceMaterial);
+traceLine.frustumCulled = false;
+scene.add(traceLine);
+
+function addTracePoint(point) {
+    // 0.3m未満しか動いていなければ追加しない
+    if (lastTracePoint && lastTracePoint.distanceToSquared(point) < 0.09) return;
+
+    if (traceCount >= MAX_TRACE_POINTS) {
+        tracePositions.copyWithin(0, 3);
+        traceCount--;
+    }
+    tracePositions[traceCount * 3]     = point.x;
+    tracePositions[traceCount * 3 + 1] = point.y;
+    tracePositions[traceCount * 3 + 2] = point.z;
+    traceCount++;
+
+    traceGeometry.setDrawRange(0, traceCount);
+    traceGeometry.attributes.position.needsUpdate = true;
+
+    if (!lastTracePoint) lastTracePoint = new THREE.Vector3();
+    lastTracePoint.copy(point);
+}
+
+
+//==========================================================
+// ルートノード / peer(隣接)関係のデータ管理
+//==========================================================
+
+const ROUTE_API_URL = "https://astrahost.astraworks.mydns.jp:3333/routes/route_editor3D";
+const PLACES_API_URL = "https://astrahost.astraworks.mydns.jp:3333/routes/places";
+const PLACE_NODE_API_URL = "https://astrahost.astraworks.mydns.jp:3333/routes/place_node";
+
+const nodePositions = new Map();
+const adjacency = new Map();
+const nodeComp = new Map(); 
+// ノードごとの「ラベルを置く3D位置」(屋根の高さ)をキャッシュ
+const labelAnchors = new Map(); 
+
+let placesList = [];
+
+// 経路の再計算を省くためのキャッシュ
+let lastRouteStartId = null;
+let lastRoutePlaceId = null;
+
+function normalizePlaceName(name) {
+    return (name || "").trim();
+}
+
+async function loadRouteNodes() {
+    try {
+        const res = await fetch(ROUTE_API_URL);
+        if (!res.ok) throw new Error(res.status);
+        const data = await res.json();
+        const nodeList = data.nodes || [];
+
+        adjacency.clear();
+        nodePositions.clear();
+        labelAnchors.clear();   
+        lastRouteStartId = null;
+        clearRoutePath();
+        routeInfo.textContent = "";
+        routeInfo.classList.remove("visible");
+
+        nodeList.forEach(n => {
+            const pos = new THREE.Vector3(Number(n.x), Number(n.y), Number(n.z));
+            nodePositions.set(n.id, pos);
+            adjacency.set(n.id, []);
+        });
+
+        nodeList.forEach(n => {
+            (n.peers || []).forEach(peerRaw => {
+                const peerId = (typeof peerRaw === "string") ? peerRaw : peerRaw.id;
+                const storedDist = (typeof peerRaw === "object" && peerRaw !== null && typeof peerRaw.dist === "number")
+                    ? peerRaw.dist
+                    : null;
+
+                if (!nodePositions.has(peerId)) return;
+
+                const distance = (storedDist !== null)
+                    ? storedDist
+                    : nodePositions.get(n.id).distanceTo(nodePositions.get(peerId));
+
+                adjacency.get(n.id).push({ id: peerId, dist: distance });
+                if (adjacency.has(peerId) && !adjacency.get(peerId).some(e => e.id === n.id)) {
+                    adjacency.get(peerId).push({ id: n.id, dist: distance });
+                }
+            });
+        });
+
+           nodeComp.clear();
+        let compNo = 0;
+        for (const startId of adjacency.keys()) {
+            if (nodeComp.has(startId)) continue;
+            compNo++;
+            const stack = [startId];
+            nodeComp.set(startId, compNo);
+            while (stack.length) {
+                const cur = stack.pop();
+                for (const e of adjacency.get(cur) || []) {
+                    if (!nodeComp.has(e.id)) {
+                        nodeComp.set(e.id, compNo);
+                        stack.push(e.id);
+                    }
+                }
+            }
+        }
+
+        console.log(`ルートデータ読み込み: ノード${nodeList.length}件(非表示・探索用データのみ)`);
+    } catch (e) {
+        console.error("ルートノードの読み込みに失敗しました:", e);
+        routeInfo.textContent = "エラー: ノードデータの取得に失敗しました";
+        routeInfo.classList.add("visible");
+    }
+}
+
+async function loadPlacesAndLinks() {
+    try {
+        const [placesRes, linksRes] = await Promise.all([
+            fetch(PLACES_API_URL),
+            fetch(PLACE_NODE_API_URL)
+        ]);
+        const rawPlaces = placesRes.ok ? await placesRes.json() : [];
+        const links = linksRes.ok ? await linksRes.json() : [];
+
+        const rawPlaceNodeMap = new Map();
+        links.forEach(l => {
+            if (!rawPlaceNodeMap.has(l.place_id)) rawPlaceNodeMap.set(l.place_id, new Set());
+            rawPlaceNodeMap.get(l.place_id).add(l.node_id);
+        });
+
+        // 同じ施設名を持つ複数のplace_idを1つの施設としてまとめる
+        const groupMap = new Map();
+
+        rawPlaces.forEach(p => {
+            const key = normalizePlaceName(p.name);
+
+            if (!groupMap.has(key)) {
+                groupMap.set(key, {
+                    id: p.id,
+                    name: p.name,
+                    placeIds: new Set(),
+                    nodeIds: new Set()
+                });
+            }
+
+            const group = groupMap.get(key);
+            group.placeIds.add(p.id);
+
+            const nodes = rawPlaceNodeMap.get(p.id);
+            if (nodes) nodes.forEach(nodeId => group.nodeIds.add(nodeId));
+        });
+
+        placesList = Array.from(groupMap.values());
+
+        console.log(
+            `施設データ読み込み: 施設(生データ)${rawPlaces.length}件 → 統合後${placesList.length}件 / 紐づけ${links.length}件`
+        );
+
+        // 開いている入力画面の一覧を更新
+        if (searchScreen.classList.contains("visible")) renderSearchScreenList();
+        if (routeScreen.classList.contains("visible") && routeScreenList.dataset.open === "1") renderRouteScreenList();
+    } catch (e) {
+        console.error("施設データの読み込みに失敗しました:", e);
+    }
+}
+
+
+//==========================================================
+// 主要建物の常時ラベル表示(エディタと同じ仕様)
+//==========================================================
+
+const labelLayer = document.getElementById("labelLayer");
+const MAJOR_API_URL = "https://astrahost.astraworks.mydns.jp:3333/routes/place_node/majors";
+const MAJOR_LABEL_Y_OFFSET = 6;     // ノードの少し上に表示(m)
+
+const majorNames = new Map();   // nodeId -> string[]
+const labelEls = new Map();     // nodeId -> HTMLElement
+
+function setMajorNames(nodeId, names) {
+    if (!names.length) {
+        majorNames.delete(nodeId);
+        const el = labelEls.get(nodeId);
+        if (el) { el.remove(); labelEls.delete(nodeId); }
+        return;
+    }
+    majorNames.set(nodeId, names);
+    let el = labelEls.get(nodeId);
+    if (!el) {
+        el = document.createElement("div");
+        el.className = "major-label";
+        labelLayer.appendChild(el);
+        labelEls.set(nodeId, el);
+    }
+    el.textContent = names.join(" / ");
+}
+
+async function loadMajorLabels() {
+    try {
+        const res = await fetch(MAJOR_API_URL);
+        if (!res.ok) return;
+        const rows = await res.json();
+
+        const map = new Map();
+        rows.forEach(r => {
+            if (!map.has(r.node_id)) map.set(r.node_id, []);
+            map.get(r.node_id).push(r.name);
+        });
+
+        for (const id of [...majorNames.keys()]) {
+            if (!map.has(id)) setMajorNames(id, []);
+        }
+        map.forEach((names, id) => setMajorNames(id, names));
+    } catch (e) {
+        console.error("主要建物ラベルの読み込みに失敗しました:", e);
+    }
+}
+
+const _lblCam = new THREE.Vector3();
+const LABEL_MIN_DEPTH = 0.5;     // カメラに近すぎる点は描かない(m)
+const LABEL_ROOF_MARGIN = 2;     // 屋根からの余白(m)
+const LABEL_SCREEN_MARGIN = 120; // 画面外でもこのpx以内なら描く
+
+const LABEL_SEARCH_RADIUS = 15;  // ノードの周囲この範囲(m)で最も高い所を探す
+const LABEL_SEARCH_STEP   = 3;   // サンプリング間隔(m)
+const LABEL_LIFT = 8;   // 地面(屋根)からラベルまでの高さ(m)
+const _lblV = new THREE.Vector3();
+
+// マーカーと同じ方式: X,Zの真上からレイ → 交点 の少し上
+function getLabelAnchor(id, pos) {
+    let a = labelAnchors.get(id);
+    if (a) return a;
+    if (!terrain) return new THREE.Vector3(pos.x, pos.y + LABEL_LIFT, pos.z);  // 地形前はキャッシュしない
+
+    const hit = castDown(pos.x, pos.z);
+    const baseY = hit ? hit.y : pos.y;
+    a = new THREE.Vector3(pos.x, baseY + LABEL_LIFT, pos.z);
+    labelAnchors.set(id, a);
+    return a;
+}
+
+// 確認用の表示(情報パネルの下)
+const lblDebug = document.createElement("div");
+const flyDbg = document.createElement("div");
+flyDbg.style.cssText =
+    "position:fixed;left:0;bottom:0;z-index:999;background:rgba(0,0,0,.8);" +
+    "color:#0f0;font-size:10px;white-space:pre-line;padding:4px;max-width:100vw;pointer-events:none";
+document.body.appendChild(flyDbg);
+
+
+lblDebug.style.cssText = "margin-top:3px;font-size:8px;color:#8ff;white-space:pre-line";
+infoPanel.appendChild(lblDebug);
+let _dbgCount = 0;
+
+function updateLabels() {
+    if (!labelEls.size) return;
+    camera.updateMatrixWorld(true);
+
+    let first = true;
+    for (const [id, el] of labelEls) {
+        const pos = nodePositions.get(id);
+        if (!pos) { el.style.display = "none"; continue; }
+
+        const anchor = getLabelAnchor(id, pos);
+        _lblV.copy(anchor).project(camera);
+
+        // カメラの後ろだけ隠す
+        if (_lblV.z > 1) { el.style.display = "none"; continue; }
+
+        const sx = (_lblV.x * 0.5 + 0.5) * innerWidth;
+        const sy = (-_lblV.y * 0.5 + 0.5) * innerHeight;
+
+
+        if (sx > innerWidth * 0.8 && sy > innerHeight * 0.8) {
+            const c = anchor.clone().applyMatrix4(camera.matrixWorldInverse);
+            const vv = window.visualViewport;
+            flyDbg.textContent =
+                `FLY ${el.textContent}\n` +
+                `scr ${sx.toFixed(0)},${sy.toFixed(0)}\n` +
+                `ndc ${_lblV.x.toFixed(2)},${_lblV.y.toFixed(2)},${_lblV.z.toFixed(4)}\n` +
+                `depth ${(-c.z).toFixed(2)}\n` +
+                `inner ${innerWidth}x${innerHeight} dpr ${devicePixelRatio}\n` +
+                `layer ${labelLayer.clientWidth}x${labelLayer.clientHeight}\n` +
+                `canvas ${renderer.domElement.clientWidth}x${renderer.domElement.clientHeight}\n` +
+                `vv ${vv ? vv.width.toFixed(0) + "x" + vv.height.toFixed(0) + " s" + vv.scale.toFixed(2) : "-"}\n` +
+                `aspect ${camera.aspect.toFixed(3)}`;
+        }
+
+        el.style.display = "block";
+        el.style.left = `${sx}px`;
+        el.style.top  = `${sy}px`;
+
+        if (first && ++_dbgCount % 10 === 0) {
+            lblDebug.textContent =
+                `L:${el.textContent}\n` +
+                `node ${pos.x.toFixed(1)},${pos.y.toFixed(1)},${pos.z.toFixed(1)}\n` +
+                `anch ${anchor.x.toFixed(1)},${anchor.y.toFixed(1)},${anchor.z.toFixed(1)}\n` +
+                `cam  ${camera.position.x.toFixed(0)},${camera.position.y.toFixed(0)},${camera.position.z.toFixed(0)}\n` +
+                `scr  ${sx.toFixed(0)},${sy.toFixed(0)} z${_lblV.z.toFixed(4)}`;
+        }
+        first = false;
+    }
+}
+//==========================================================
+// 最短経路探索(ダイクストラ法・ヒープ版)
+//==========================================================
+
+function dijkstraAll(startId) {
+    const dist = new Map();
+    const prev = new Map();
+    if (!adjacency.has(startId)) return { dist, prev };
+
+    for (const id of adjacency.keys()) dist.set(id, Infinity);
+    dist.set(startId, 0);
+
+    // 最小ヒープ [距離, id]
+    const heap = [[0, startId]];
+    const push = (item) => {
+        heap.push(item);
+        let i = heap.length - 1;
+        while (i > 0) {
+            const p = (i - 1) >> 1;
+            if (heap[p][0] <= heap[i][0]) break;
+            [heap[p], heap[i]] = [heap[i], heap[p]];
+            i = p;
+        }
+    };
+    const pop = () => {
+        const top = heap[0];
+        const last = heap.pop();
+        if (heap.length) {
+            heap[0] = last;
+            let i = 0;
+            while (true) {
+                const l = i * 2 + 1, r = l + 1;
+                let m = i;
+                if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+                if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+                if (m === i) break;
+                [heap[m], heap[i]] = [heap[i], heap[m]];
+                i = m;
+            }
+        }
+        return top;
+    };
+
+    while (heap.length) {
+        const [d, id] = pop();
+        if (d > dist.get(id)) continue;
+        for (const edge of adjacency.get(id) || []) {
+            const nd = d + edge.dist;
+            if (nd < dist.get(edge.id)) {
+                dist.set(edge.id, nd);
+                prev.set(edge.id, id);
+                push([nd, edge.id]);
+            }
+        }
+    }
+    return { dist, prev };
+}
+
+function buildPath(prev, startId, endId) {
+    if (startId === endId) return [startId];
+    const path = [endId];
+    let cur = endId;
+    while (cur !== startId) {
+        cur = prev.get(cur);
+        if (cur === undefined) return null;
+        path.push(cur);
+    }
+    path.reverse();
+    return path;
+}
+
+function findNearestNode(worldPos) {
+    let bestId = null;
+    let bestDist = Infinity;
+    nodePositions.forEach((pos, id) => {
+        const d = pos.distanceTo(worldPos);
+        if (d < bestDist) {
+            bestDist = d;
+            bestId = id;
+        }
+    });
+    return bestId;
+}
+
+function findNearestNodeXZ(x, z) {
+    let bestId = null;
+    let bestDist = Infinity;
+    nodePositions.forEach((pos, id) => {
+        const dx = pos.x - x;
+        const dz = pos.z - z;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        if (d < bestDist) {
+            bestDist = d;
+            bestId = id;
+        }
+    });
+    return bestId;
+}
+
+
+//==========================================================
+// 経路の見た目(板ポリゴンのリボン)
+//==========================================================
+
+const ROUTE_PATH_WIDTH = 10.0;
+const ROUTE_PATH_HEIGHT_OFFSET = 0.5;
+
+const ROUTE_PATH_MAT = new THREE.MeshBasicMaterial({
+    color: 0xffcc00,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.85,
+    depthWrite: false
+});
+
+const routePathGroup = new THREE.Group();
+routePathGroup.renderOrder = 10;
+scene.add(routePathGroup);
+
+function clearRoutePath() {
+    while (routePathGroup.children.length) {
+        const child = routePathGroup.children.pop();
+        child.geometry.dispose();
+        routePathGroup.remove(child);
+    }
+}
+
+function createSegmentQuad(posA, posB, width) {
+    const dir = new THREE.Vector3().subVectors(posB, posA);
+    dir.y = 0;
+    const length = dir.length();
+    if (length < 1e-6) return null;
+    dir.normalize();
+
+    const perp = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(width / 2);
+
+    const p1 = new THREE.Vector3(posA.x + perp.x, posA.y + ROUTE_PATH_HEIGHT_OFFSET, posA.z + perp.z);
+    const p2 = new THREE.Vector3(posA.x - perp.x, posA.y + ROUTE_PATH_HEIGHT_OFFSET, posA.z - perp.z);
+    const p3 = new THREE.Vector3(posB.x - perp.x, posB.y + ROUTE_PATH_HEIGHT_OFFSET, posB.z - perp.z);
+    const p4 = new THREE.Vector3(posB.x + perp.x, posB.y + ROUTE_PATH_HEIGHT_OFFSET, posB.z + perp.z);
+
+    const geometry = new THREE.BufferGeometry();
+    const vertices = new Float32Array([
+        p1.x, p1.y, p1.z,
+        p2.x, p2.y, p2.z,
+        p3.x, p3.y, p3.z,
+
+        p1.x, p1.y, p1.z,
+        p3.x, p3.y, p3.z,
+        p4.x, p4.y, p4.z
+    ]);
+    geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+    geometry.computeVertexNormals();
+
+    return new THREE.Mesh(geometry, ROUTE_PATH_MAT);
+}
+
+function createJointDisc(pos, radius) {
+    const geometry = new THREE.CircleGeometry(radius, 16);
+    geometry.rotateX(-Math.PI / 2);
+    const mesh = new THREE.Mesh(geometry, ROUTE_PATH_MAT);
+    mesh.position.set(pos.x, pos.y + ROUTE_PATH_HEIGHT_OFFSET, pos.z);
+    return mesh;
+}
+
+function buildRoutePathRibbon(pathIds) {
+    clearRoutePath();
+    if (!pathIds || pathIds.length < 2) return;
+
+    for (let i = 0; i < pathIds.length - 1; i++) {
+        const posA = nodePositions.get(pathIds[i]);
+        const posB = nodePositions.get(pathIds[i + 1]);
+        if (!posA || !posB) continue;
+
+        const quad = createSegmentQuad(posA, posB, ROUTE_PATH_WIDTH);
+        if (quad) routePathGroup.add(quad);
+
+        routePathGroup.add(createJointDisc(posA, ROUTE_PATH_WIDTH / 2));
+    }
+
+    const lastPos = nodePositions.get(pathIds[pathIds.length - 1]);
+    if (lastPos) routePathGroup.add(createJointDisc(lastPos, ROUTE_PATH_WIDTH / 2));
+}
+
+
+//==========================================================
+// 案内文の生成(ノードとリンクの角度から 直進 / 曲がり角 / 右折・左折 を判定)
+//==========================================================
+
+function distXZ(a, b) {
+    return Math.hypot(a.x - b.x, a.z - b.z);
+}
+
+// 経路上で最初に現れる「曲がるべき地点」を探す。なければ null
+function findNextTurn(path) {
+    const pts = path.map(id => nodePositions.get(id));
+    const n = pts.length;
+    if (n < 3 || pts.some(p => !p)) return null;
+
+    const cum = [0];
+    for (let i = 1; i < n; i++) cum[i] = cum[i - 1] + distXZ(pts[i - 1], pts[i]);
+
+    // ノードが細かく並ぶ曲線でも判定できるよう、前後 TURN_WINDOW_M 先の点との角度で測る
+    const turnAt = (i) => {
+        let b = i;
+        while (b > 0 && cum[i] - cum[b] < TURN_WINDOW_M) b--;
+        let f = i;
+        while (f < n - 1 && cum[f] - cum[i] < TURN_WINDOW_M) f++;
+
+        const v1x = pts[i].x - pts[b].x, v1z = pts[i].z - pts[b].z;
+        const v2x = pts[f].x - pts[i].x, v2z = pts[f].z - pts[i].z;
+        if (Math.hypot(v1x, v1z) < 1e-6 || Math.hypot(v2x, v2z) < 1e-6) return 0;
+
+        // 真上から見て x=右, z=下 の座標系: cross > 0 が右曲がり
+        const cross = v1x * v2z - v1z * v2x;
+        const dot = v1x * v2x + v1z * v2z;
+        return Math.atan2(cross, dot) * 180 / Math.PI;
+    };
+
+    for (let i = 1; i < n - 1; i++) {
+        const a = turnAt(i);
+        if (Math.abs(a) < TURN_STRAIGHT_DEG) continue;
+
+        // 角の付近で最も角度が大きいノードを曲がり位置にする
+        let bestI = i, bestA = a;
+        for (let j = i + 1; j < n - 1 && cum[j] - cum[i] <= TURN_WINDOW_M; j++) {
+            const aj = turnAt(j);
+            if (Math.abs(aj) > Math.abs(bestA)) { bestA = aj; bestI = j; }
+        }
+        return { angle: bestA, distance: cum[bestI] };
+    }
+    return null;
+}
+
+function buildGuidanceText(path, remainingM) {
+    if (remainingM < 5) return "まもなく目的地に到着します。";
+
+    const turn = findNextTurn(path);
+    if (!turn) return "直進して、目的地に向かってください。";
+
+    const right = turn.angle > 0;
+    const lead = turn.distance >= 5 ? "直進して、" : "";
+
+    if (Math.abs(turn.angle) >= TURN_CORNER_DEG) {
+        return `${lead}次の角を${right ? "右折" : "左折"}してください。`;
+    }
+    return `${lead}次の角を${right ? "右" : "左"}斜めに進んでください。`;
+}
+
+function showGuidance(remainingM, text) {
+    const minutes = Math.max(1, Math.ceil(remainingM / WALK_SPEED_M_PER_MIN));
+    guideTime.textContent = `あと${minutes}分`;
+    guideDist.textContent = `残り${Math.round(remainingM)}m`;
+    guideText.textContent = text;
+}
+
+function showGuideError(text) {
+    guideTime.textContent = "あと--分";
+    guideDist.textContent = "残り--m";
+    guideText.textContent = text;
+    routeInfo.textContent = text;
+    routeInfo.classList.add("visible");
+}
+
+
+//==========================================================
+// 一覧の描画(建物検索 / 目的地入力で共通)
+//==========================================================
+
+const PIN_SVG =
+    '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>';
+
+function getFilteredPlaces(query) {
+    const q = (query || "").trim().toLowerCase();
+    if (!q) return placesList;
+    return placesList.filter(p => (p.name || "").toLowerCase().includes(q));
+}
+
+// 入力があるときだけ×を表示する
+function updateClearButtons() {
+    searchScreenClear.classList.toggle("visible", searchScreenInput.value.length > 0);
+    destClear.classList.toggle("visible", destInput.value.length > 0);
+}
+
+function renderPlaceList(container, query, onPick, selectedId) {
+    container.innerHTML = "";
+
+    const addEmpty = (text) => {
+        const div = document.createElement("div");
+        div.className = "placeItem empty";
+        div.textContent = text;
+        container.appendChild(div);
+    };
+
+    if (!placesList.length) { addEmpty("施設データを読み込み中です..."); return; }
+
+    const filtered = getFilteredPlaces(query);
+    if (!filtered.length) { addEmpty("該当する施設がありません"); return; }
+
+    filtered.forEach(place => {
+        const div = document.createElement("div");
+        div.className = "placeItem";
+        if (selectedId !== undefined && selectedId === place.id) div.classList.add("selected");
+
+        const pin = document.createElement("span");
+        pin.className = "pin";
+        pin.innerHTML = PIN_SVG;
+
+        const label = document.createElement("span");
+        label.textContent = place.name;
+
+        div.appendChild(pin);
+        div.appendChild(label);
+        div.addEventListener("click", () => onPick(place));
+        container.appendChild(div);
+    });
+}
+
+
+//==========================================================
+// 建物検索モード(検索バー → 一覧 → 確定でカメラ移動)
+//==========================================================
+
+function renderSearchScreenList() {
+    updateClearButtons();
+    renderPlaceList(searchScreenList, searchScreenInput.value, focusOnPlace);
+}
+
+function openSearchScreen() {
+    searchScreen.classList.add("visible");
+    renderSearchScreenList();
+    searchScreenInput.focus();
+}
+
+function closeSearchScreen() {
+    searchScreen.classList.remove("visible");
+    searchScreenInput.blur();
+}
+
+searchBar.addEventListener("click", openSearchScreen);
+searchScreenBack.addEventListener("click", closeSearchScreen);
+searchScreenInput.addEventListener("input", renderSearchScreenList);
+searchScreenClear.addEventListener("click", () => {
+    searchScreenInput.value = "";
+    renderSearchScreenList();
+    searchScreenInput.focus();
+});
+
+function getPlaceCenter(place) {
+    const sum = new THREE.Vector3();
+    let count = 0;
+    place.nodeIds.forEach(id => {
+        const pos = nodePositions.get(id);
+        if (pos) { sum.add(pos); count++; }
+    });
+    return count ? sum.multiplyScalar(1 / count) : null;
+}
+
+function focusOnPlace(place) {
+    const center = getPlaceCenter(place);
+    if (!center) {
+        showToast(nodePositions.size ? `「${place.name}」の位置データがありません` : "ノードデータを読み込み中です");
+        return;
+    }
+
+    searchBarText.textContent = place.name;
+    searchBarText.classList.add("filled");
+    closeSearchScreen();
+    flyTo(center);
+}
+
+
+//==========================================================
+// 経路案内モード(行き先ボタン → 目的地入力 → 確定で案内開始)
+//==========================================================
+
+let selectedPlace = null;
+let routeRecalcTimer = null;
+const ROUTE_RECALC_INTERVAL_MS = 500;
+
+function renderRouteScreenList() {
+    routeScreenList.dataset.open = "1";
+    renderPlaceList(
+        routeScreenList,
+        destInput.value,
+        selectDestination,
+        selectedPlace ? selectedPlace.id : undefined
+    );
+}
+
+function openRouteScreen() {
+    routeScreen.classList.add("visible");
+    routeScreenList.innerHTML = "";
+    routeScreenList.dataset.open = "";
+    destInput.value = selectedPlace ? selectedPlace.name : "";
+    updateClearButtons();
+}
+
+function closeRouteScreen() {
+    routeScreen.classList.remove("visible");
+    routeScreenList.dataset.open = "";
+    destInput.blur();
+}
+
+btnDest.addEventListener("click", openRouteScreen);
+routeScreenBack.addEventListener("click", closeRouteScreen);
+
+// 「目的地を入力」をタップすると候補一覧が出る
+destInput.addEventListener("focus", renderRouteScreenList);
+destInput.addEventListener("click", renderRouteScreenList);
+destInput.addEventListener("input", renderRouteScreenList);
+destClear.addEventListener("click", () => {
+    destInput.value = "";
+    renderRouteScreenList();
+    destInput.focus();
+});
+
+function selectDestination(place) {
+    selectedPlace = place;
+    lastRouteStartId = null;   // キャッシュ無効化
+    lastRoutePlaceId = null;
+    destInput.value = place.name;
+    closeRouteScreen();
+
+    guideTime.textContent = "あと--分";
+    guideDist.textContent = "残り--m";
+    guideText.textContent = "経路を計算しています…";
+    guideSheet.classList.add("visible");
+    document.body.classList.add("guiding");
+
+    computeRouteToSelectedPlace();
+
+    if (routeRecalcTimer) clearInterval(routeRecalcTimer);
+    routeRecalcTimer = setInterval(computeRouteToSelectedPlace, ROUTE_RECALC_INTERVAL_MS);
+}
+
+function clearDestination() {
+    selectedPlace = null;
+    lastRouteStartId = null;
+    lastRoutePlaceId = null;
+
+    if (routeRecalcTimer) {
+        clearInterval(routeRecalcTimer);
+        routeRecalcTimer = null;
+    }
+
+    clearRoutePath();
+    routeInfo.textContent = "";
+    routeInfo.classList.remove("visible");
+    destInput.value = "";
+
+    guideSheet.classList.remove("visible");
+    document.body.classList.remove("guiding");
+}
+
+btnRoute.addEventListener("click", clearDestination);
+btnGuideEnd.addEventListener("click", clearDestination);
+
+
+//==========================================================
+// 選択中の施設への経路計算
+//==========================================================
+
+function computeRouteToSelectedPlace() {
+
+    if (!selectedPlace) return;
+
+    if (adjacency.size === 0) {
+        showGuideError("ノードデータがまだ読み込まれていません");
+        return;
+    }
+
+    if (!hasWorldPosition) {
+        showGuideError("現在地がまだ取得できていません");
+        return;
+    }
+
+    const startId = (hasIntersection && !pointerIsFixedHeight)
+        ? findNearestNode(intersectionPoint)
+        : findNearestNodeXZ(currentWorldX, currentWorldZ);
+
+    if (startId === null || !adjacency.has(startId)) {
+        showGuideError("始点ノードが見つかりませんでした");
+        return;
+    }
+
+    // 始点ノードも目的地も変わっていなければ再計算しない
+    if (startId === lastRouteStartId && selectedPlace.id === lastRoutePlaceId) return;
+    lastRouteStartId = startId;
+    lastRoutePlaceId = selectedPlace.id;
+
+    const { dist, prev } = dijkstraAll(startId);
+
+    const nodeIds = selectedPlace.nodeIds;
+    if (!nodeIds || !nodeIds.size) {
+        showGuideError(`「${selectedPlace.name}」に紐づくノードがありません`);
+        return;
+    }
+
+    let bestEndId = null;
+    let bestDist = Infinity;
+    nodeIds.forEach(nodeId => {
+        const d = dist.get(nodeId);
+        if (d !== undefined && d < bestDist) {
+            bestDist = d;
+            bestEndId = nodeId;
+        }
+    });
+
+    if (bestEndId === null) {
+        const ids = [...nodeIds];
+        const missing = ids.filter(id => !adjacency.has(id)).length;
+        const comps = [...new Set(ids.map(id => nodeComp.get(id)))].join(",");
+        showGuideError(
+            `到達不可 始点:${startId}(群${nodeComp.get(startId)}) ` +
+            `目的ノード${ids.length}件 / 道路網に無い${missing}件 / 所属群:${comps}`
+        );
+        return;
+    }
+
+    const path = buildPath(prev, startId, bestEndId);
+    if (!path) {
+        showGuideError("経路の構築に失敗しました");
+        return;
+    }
+
+    buildRoutePathRibbon(path);
+
+    // 残り距離 = 現在地から始点ノードまで + 経路上の距離
+    const startPos = nodePositions.get(startId);
+    const toStart = startPos ? Math.hypot(startPos.x - currentWorldX, startPos.z - currentWorldZ) : 0;
+    const remainingM = bestDist + toStart;
+
+    showGuidance(remainingM, buildGuidanceText(path, remainingM));
+
+    routeInfo.textContent =
+        `目的地施設 : ${selectedPlace.name}\n` +
+        `始点ノード : ${startId}\n` +
+        `終点ノード : ${bestEndId}\n` +
+        `経由ノード数 : ${path.length}\n` +
+        `残り距離 : ${remainingM.toFixed(2)}`;
+    routeInfo.classList.add("visible");
+}
+
+
+//==========================================================
+// Raycaster / 地形
+//==========================================================
+
+const raycaster = new THREE.Raycaster();
+const rayDirection = new THREE.Vector3(0, -1, 0);
+const rayOrigin = new THREE.Vector3();
+const intersectionPoint = new THREE.Vector3();
+const screenPosition = new THREE.Vector3();
+
+let terrain = null;
+let hasIntersection = false;
+let rayStartHeight = 1000;
+
+let terrainBox = null;               // 地形のワールド座標での範囲
+const TERRAIN_MARGIN = 0.5;          // 端からの余白
+const CLAMP_TO_TERRAIN = false;      // true: 地形の範囲内に収める / false: 実際の位置のまま表示
+const FIXED_HEIGHT_Y = null;         // 交点がないときのポインタの高さ。null なら地形の最下部+1
+let pointerIsFixedHeight = false;    // 直近の位置が固定高さかどうか
+
+let currentWorldX = null;
+let currentWorldZ = null;
+let hasWorldPosition = false;
+
+let currentMarkerPos = null;
+
+function moveMarkerSmooth(targetPos) {
+    // 補間なし。取得した位置をそのまま反映する
+    if (!currentMarkerPos) currentMarkerPos = new THREE.Vector3();
+    currentMarkerPos.copy(targetPos);
+}
+
+
+// カメラの注視点を指定位置へ滑らかに移動する(現在の視点オフセットは維持)
+let flyAnimId = null;
+
+function flyTo(targetPos) {
+    if (!targetPos) return;
+
+    const startTarget = controls.target.clone();
+    const startCamPos = camera.position.clone();
+    const endTarget = targetPos.clone();
+    const endCamPos = endTarget.clone().add(offset);
+
+    const startTime = performance.now();
+    const duration = 600;
+
+    if (flyAnimId) {
+        cancelAnimationFrame(flyAnimId);
+        flyAnimId = null;
+    }
+
+    function step(time) {
+        let progress = (time - startTime) / duration;
+        if (progress > 1) progress = 1;
+
+        controls.target.lerpVectors(startTarget, endTarget, progress);
+        camera.position.lerpVectors(startCamPos, endCamPos, progress);
+        controls.update();
+
+        if (progress < 1) {
+            flyAnimId = requestAnimationFrame(step);
+        } else {
+            flyAnimId = null;
+        }
+    }
+
+    flyAnimId = requestAnimationFrame(step);
+}
+
+function goToCurrentLocation() {
+    if (!currentMarkerPos) {
+        showToast("現在地を取得しています");
+        return;
+    }
+    flyTo(currentMarkerPos);
+}
+
+btnLocate.addEventListener("click", goToCurrentLocation);
+
+
+// 真上からレイを撃って地形との交点を返す(なければnull)
+// 同じ場所(0.5mメッシュ)の結果はキャッシュして、重いレイキャストを省く
+const heightCache = new Map();
+const HEIGHT_CELL = 0.5;
+
+function castDown(x, z) {
+    const key = Math.round(x / HEIGHT_CELL) + "," + Math.round(z / HEIGHT_CELL);
+
+    if (heightCache.has(key)) {
+        const cachedY = heightCache.get(key);
+        return cachedY === null ? null : new THREE.Vector3(x, cachedY, z);
+    }
+
+    rayOrigin.set(x, rayStartHeight, z);
+    raycaster.set(rayOrigin, rayDirection);
+    const hits = raycaster.intersectObject(terrain, true);
+
+    const y = hits.length ? hits[0].point.y : null;
+    heightCache.set(key, y);
+    return y === null ? null : new THREE.Vector3(x, y, z);
+}
+
+// 指定したワールドX, Zを地形上の位置に変換して、マーカー・軌跡・情報表示を更新する。
+function updatePositionFromWorldXZ(x, z, extraInfoLines) {
+
+    if (!terrain) return;
+
+    const notes = [];
+
+    if (CLAMP_TO_TERRAIN && terrainBox) {
+        const cx = Math.min(Math.max(x, terrainBox.min.x + TERRAIN_MARGIN), terrainBox.max.x - TERRAIN_MARGIN);
+        const cz = Math.min(Math.max(z, terrainBox.min.z + TERRAIN_MARGIN), terrainBox.max.z - TERRAIN_MARGIN);
+        if (cx !== x || cz !== z) {
+            notes.push("※地図範囲外のため端に補正");
+            x = cx;
+            z = cz;
+        }
+    }
+
+    // 真上からレイを撃つ。当たらなければ固定の高さでポインタを出す。
+    let point = castDown(x, z);
+    pointerIsFixedHeight = false;
+
+    if (!point) {
+        let y = FIXED_HEIGHT_Y;
+        if (y === null) {
+            y = terrainBox ? terrainBox.min.y + 1 : 0;
+        }
+        point = new THREE.Vector3(x, y, z);
+        pointerIsFixedHeight = true;
+        notes.push("※交点なし:固定の高さで表示");
+    }
+
+    currentWorldX = x;
+    currentWorldZ = z;
+    hasWorldPosition = true;
+
+    hasIntersection = true;
+    intersectionPoint.copy(point);
+
+    marker.style.display = "block";
+
+    moveMarkerSmooth(intersectionPoint);
+    addTracePoint(intersectionPoint);
+
+    const lines = (extraInfoLines || []).concat(notes).concat([
+        `X : ${intersectionPoint.x.toFixed(2)}`,
+        `Y : ${intersectionPoint.y.toFixed(2)}`,
+        `Z : ${intersectionPoint.z.toFixed(2)}`
+    ]);
+    info.textContent = lines.join("\n");
+}
+
+
+function updatePositionFromManual() {
+    if (!referenceReady) return;
+    const x = Number(sxInput.value);
+    const z = Number(szInput.value);
+    updatePositionFromWorldXZ(x, z, ["[手動モード]"]);
+}
+
+
+function updateMarkerScreenPosition() {
+    if (!hasIntersection || !currentMarkerPos) return;
+
+    screenPosition.copy(currentMarkerPos);
+    screenPosition.project(camera);
+
+    const x = (screenPosition.x * 0.5 + 0.5) * innerWidth;
+    const y = (-screenPosition.y * 0.5 + 0.5) * innerHeight;
+
+    marker.style.left = `${x}px`;
+    marker.style.top = `${y}px`;
+}
+
+
+//==========================================================
+// GLBロード
+//==========================================================
+
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath("./three/examples/jsm/libs/draco/gltf/");
+
+const loader = new GLTFLoader();
+loader.setDRACOLoader(dracoLoader);
+
+loader.load(
+    //"gakkou_zahyou03-軽量化2.glb",
+    //"マーカーなし!校舎全体図blende20261015.glb",
+    //"マーカーなし!校舎全体図blende20261104.glb",
+    //"mapData.glb",
+    //"ジオメトリ.glb",
+    //"ジオメトリ2.glb",
+    "ジオメトリ3.glb",
+
+    gltf => {
+
+        terrain = gltf.scene;
+        scene.add(terrain);
+
+        const box = new THREE.Box3().setFromObject(terrain);
+        const center = box.getCenter(new THREE.Vector3());
+        terrain.position.sub(center);
+        terrain.updateMatrixWorld(true);
+        terrainBox = new THREE.Box3().setFromObject(terrain);
+
+        referenceReady = setupReferencePoints(terrain);
+
+        const size = box.getSize(new THREE.Vector3());
+        const modelScale = Math.max(size.x, size.y, size.z) || 100;
+        rayStartHeight = size.y + modelScale;
+
+        const boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+        const dist = Math.max(boundingSphere.radius * 2.2, 10);
+        camera.position.set(dist * 0.6, dist * 0.8, dist * 0.6);
+        controls.target.set(0, 0, 0);
+        controls.update();
+        offset.subVectors(camera.position, controls.target);
+
+        loading.remove();
+
+        // GLBより先にGPSが取れていた場合は、ここで地形上へ反映する
+        if (referenceReady && lastGPSFix) {
+            updateGPS(lastGPSFix.lat, lastGPSFix.lon, lastGPSFix.accuracy);
+        }
+
+        loadRouteNodes().then(loadMajorLabels);
+
+        loadPlacesAndLinks();
+
+        console.log("GLB Loaded");
+    },
+
+    undefined,
+
+    error => {
+        console.error("GLB Load Error:", error);
+        loading.textContent = "GLBロード失敗（GPSは別途測位中）";
+        info.textContent = "地図データ(GLB)の読み込みに失敗しました。ファイル名・配置・通信状態を確認してください。\nGPS測位は継続しています。";
+    }
+);
+
+
+//==========================================================
+// GPS
+//   ・gps.html と同じ方式: watchPosition のコールバック内で
+//     緯度経度を即座に情報パネルへ表示(加工なし)
+//   ・重い3D側の反映は requestAnimationFrame で
+//     「1フレームにつき最新値1回」にまとめる
+//==========================================================
+
+let gpsWatchId = null;
+let lastGPSFix = null;      // 最新の測位結果 {lat, lon, accuracy}
+let lastGPSTime = null;
+let lastProcessMs = 0;
+let mapUpdatePending = false;
+
+function scheduleMapUpdate() {
+    if (mapUpdatePending) return;
+    mapUpdatePending = true;
+    requestAnimationFrame(() => {
+        mapUpdatePending = false;
+        if (!manualMode && lastGPSFix) {
+            const t0 = performance.now();
+            updateGPS(lastGPSFix.lat, lastGPSFix.lon, lastGPSFix.accuracy);
+            lastProcessMs = performance.now() - t0;
+        }
+    });
+}
+
+function startGPS() {
+    if (!navigator.geolocation) {
+        info.textContent = "この環境では位置情報APIを利用できません。" +
+            (window.isSecureContext ? "" : "\nHTTPSまたはlocalhostで開いてください。");
+        return;
+    }
+    if (gpsWatchId !== null) {
+        navigator.geolocation.clearWatch(gpsWatchId);
+    }
+
+    gpsWatchId = navigator.geolocation.watchPosition(p => {
+        // gps.html と同じ: 取得したらすぐ表示
+        latEl.textContent = p.coords.latitude;
+        lonEl.textContent = p.coords.longitude;
+
+        lastGPSFix = {
+            lat: p.coords.latitude,
+            lon: p.coords.longitude,
+            accuracy: p.coords.accuracy
+        };
+        lastGPSTime = new Date();
+
+        scheduleMapUpdate();
+    }, null, {
+        enableHighAccuracy: true
+    });
+}
+
+function updateGPS(lat, lon, accuracy) {
+    if (!referenceReady) {
+        info.textContent = "GPS取得成功（地図への変換待ち）";
+        return;
+    }
+
+    const pos = gpsToWorld(lat, lon);
+    if (!Number.isFinite(pos.x) || !Number.isFinite(pos.z)) return;
+
+    updatePositionFromWorldXZ(pos.x, pos.z, [
+        Number.isFinite(accuracy) ? `精度 : ${accuracy.toFixed(1)} m` : null,
+        lastGPSTime ? `取得 : ${lastGPSTime.toLocaleTimeString()}` : null,
+        `処理 : ${lastProcessMs.toFixed(1)} ms`
+    ].filter(Boolean));
+}
+
+btnGPSRetry.addEventListener("click", startGPS);
+
+startGPS();
+
+window.addEventListener("pagehide", () => {
+    if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
+});
+
+
+//==========================================================
+// リサイズ・アニメーションループ
+//==========================================================
+
+window.addEventListener("resize", () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    updateMarkerScreenPosition();
+});
+
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+    if (hasIntersection) updateMarkerScreenPosition();
+    updateLabels();
+}
+
+animate();
+
+</script>
+
+</body>
+</html>
