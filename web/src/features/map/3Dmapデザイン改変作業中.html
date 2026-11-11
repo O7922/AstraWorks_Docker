@@ -1091,19 +1091,33 @@ const LABEL_MIN_DEPTH = 0.5;     // カメラに近すぎる点は描かない(m
 const LABEL_ROOF_MARGIN = 2;     // 屋根からの余白(m)
 const LABEL_SCREEN_MARGIN = 120; // 画面外でもこのpx以内なら描く
 
+const LABEL_SEARCH_RADIUS = 15;  // ノードの周囲この範囲(m)で最も高い所を探す
+const LABEL_SEARCH_STEP   = 3;   // サンプリング間隔(m)
+
 function getLabelAnchor(id, pos) {
     let a = labelAnchors.get(id);
     if (a) return a;
 
-    let y = pos.y;
-    if (terrain) {
-        const hit = castDown(pos.x, pos.z);   // 真上から撃つので屋根に当たる
-        if (hit) y = Math.max(hit.y, pos.y);
-        a = new THREE.Vector3(pos.x, y + LABEL_ROOF_MARGIN, pos.z);
-        labelAnchors.set(id, a);              // 地形がある時だけキャッシュ
-        return a;
+    if (!terrain) {
+        return new THREE.Vector3(pos.x, pos.y + MAJOR_LABEL_Y_OFFSET, pos.z);
     }
-    return new THREE.Vector3(pos.x, y + MAJOR_LABEL_Y_OFFSET, pos.z);
+
+    let best = null;
+    const R = LABEL_SEARCH_RADIUS, S = LABEL_SEARCH_STEP;
+    for (let dx = -R; dx <= R; dx += S) {
+        for (let dz = -R; dz <= R; dz += S) {
+            if (dx * dx + dz * dz > R * R) continue;
+            const hit = castDown(pos.x + dx, pos.z + dz);
+            if (hit && (!best || hit.y > best.y)) best = hit;
+        }
+    }
+
+    a = best
+        ? new THREE.Vector3(best.x, Math.max(best.y, pos.y) + LABEL_ROOF_MARGIN, best.z)
+        : new THREE.Vector3(pos.x, pos.y + MAJOR_LABEL_Y_OFFSET, pos.z);
+
+    labelAnchors.set(id, a);
+    return a;
 }
 
 function updateLabels() {
