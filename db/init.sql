@@ -122,4 +122,7 @@ INSERT INTO place_node_link (place_id, node_id) VALUES
 (4, 'n6'),  -- 迫真空手部(入口A)
 (4, 'n7');  -- 迫真空手部(入口B)
 
+ALTER TABLE place_node_link
+  ADD COLUMN is_major TINYINT(1) NOT NULL DEFAULT 0;
+
 ■長坂開発領域
