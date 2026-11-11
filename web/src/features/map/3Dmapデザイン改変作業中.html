@@ -1064,18 +1064,32 @@ async function loadMajorLabels() {
 }
 
 const _lblV = new THREE.Vector3();
+const _lblCam = new THREE.Vector3();
+const LABEL_MIN_DEPTH = 2;      // カメラからこれ未満(m)の点は描かない
+
 function updateLabels() {
     if (!labelEls.size) return;
+    camera.updateMatrixWorld();
     const w = innerWidth, h = innerHeight;
+
     for (const [id, el] of labelEls) {
         const pos = nodePositions.get(id);
         if (!pos) { el.style.display = "none"; continue; }
 
         _lblV.copy(pos);
         _lblV.y += MAJOR_LABEL_Y_OFFSET;
+
+        // カメラ座標系での奥行き(前方がマイナス)。近すぎる・後ろの点は描かない
+        _lblCam.copy(_lblV).applyMatrix4(camera.matrixWorldInverse);
+        if (-_lblCam.z < LABEL_MIN_DEPTH) { el.style.display = "none"; continue; }
+
         _lblV.project(camera);
 
-        if (_lblV.z > 1 || _lblV.z < -1) { el.style.display = "none"; continue; }
+        // 画面の外(少し余裕を持たせる)は描かない
+        if (Math.abs(_lblV.x) > 1.1 || Math.abs(_lblV.y) > 1.1) {
+            el.style.display = "none";
+            continue;
+        }
 
         el.style.display = "block";
         el.style.transform =
@@ -1593,7 +1607,13 @@ function computeRouteToSelectedPlace() {
     });
 
     if (bestEndId === null) {
-        showGuideError("到達可能な経路が見つかりませんでした(ノード間が孤立している可能性があります)");
+        const ids = [...nodeIds];
+        const missing = ids.filter(id => !adjacency.has(id)).length;
+        const comps = [...new Set(ids.map(id => nodeComp.get(id)))].join(",");
+        showGuideError(
+            `到達不可 始点:${startId}(群${nodeComp.get(startId)}) ` +
+            `目的ノード${ids.length}件 / 道路網に無い${missing}件 / 所属群:${comps}`
+        );
         return;
     }
 
