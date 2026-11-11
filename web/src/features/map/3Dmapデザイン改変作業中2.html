@@ -1250,10 +1250,17 @@ function buildPath(prev, startId, endId) {
     return path;
 }
 
+// 他のノードと1本も繋がっていない孤立ノードかどうか
+function isIsolatedNode(id) {
+    const edges = adjacency.get(id);
+    return !edges || edges.length === 0;
+}
+
 function findNearestNode(worldPos) {
     let bestId = null;
     let bestDist = Infinity;
     nodePositions.forEach((pos, id) => {
+        if (isIsolatedNode(id)) return;   // ← 孤立ノードは除外
         const d = pos.distanceTo(worldPos);
         if (d < bestDist) {
             bestDist = d;
@@ -1267,6 +1274,7 @@ function findNearestNodeXZ(x, z) {
     let bestId = null;
     let bestDist = Infinity;
     nodePositions.forEach((pos, id) => {
+        if (isIsolatedNode(id)) return;   // ← 孤立ノードは除外
         const dx = pos.x - x;
         const dz = pos.z - z;
         const d = Math.sqrt(dx * dx + dz * dz);
