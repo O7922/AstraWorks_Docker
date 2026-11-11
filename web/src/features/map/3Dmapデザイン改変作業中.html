@@ -922,6 +922,7 @@ async function loadRouteNodes() {
 
         adjacency.clear();
         nodePositions.clear();
+        labelAnchors.clear();   
         lastRouteStartId = null;
         clearRoutePath();
         routeInfo.textContent = "";
@@ -1065,7 +1066,27 @@ async function loadMajorLabels() {
 
 const _lblV = new THREE.Vector3();
 const _lblCam = new THREE.Vector3();
-const LABEL_MIN_DEPTH = 2;      // カメラからこれ未満(m)の点は描かない
+const LABEL_MIN_DEPTH = 0.5;     // カメラに近すぎる点は描かない(m)
+const LABEL_ROOF_MARGIN = 2;     // 屋根からの余白(m)
+const LABEL_SCREEN_MARGIN = 120; // 画面外でもこのpx以内なら描く
+
+// ノードごとの「ラベルを置く3D位置」(屋根の高さ)をキャッシュ
+const labelAnchors = new Map();
+
+function getLabelAnchor(id, pos) {
+    let a = labelAnchors.get(id);
+    if (a) return a;
+
+    let y = pos.y;
+    if (terrain) {
+        const hit = castDown(pos.x, pos.z);   // 真上から撃つので屋根に当たる
+        if (hit) y = Math.max(hit.y, pos.y);
+        a = new THREE.Vector3(pos.x, y + LABEL_ROOF_MARGIN, pos.z);
+        labelAnchors.set(id, a);              // 地形がある時だけキャッシュ
+        return a;
+    }
+    return new THREE.Vector3(pos.x, y + MAJOR_LABEL_Y_OFFSET, pos.z);
+}
 
 function updateLabels() {
     if (!labelEls.size) return;
@@ -1076,24 +1097,27 @@ function updateLabels() {
         const pos = nodePositions.get(id);
         if (!pos) { el.style.display = "none"; continue; }
 
-        _lblV.copy(pos);
-        _lblV.y += MAJOR_LABEL_Y_OFFSET;
+        _lblV.copy(getLabelAnchor(id, pos));
 
-        // カメラ座標系での奥行き(前方がマイナス)。近すぎる・後ろの点は描かない
+        // カメラの後ろ・近すぎる点は描かない
         _lblCam.copy(_lblV).applyMatrix4(camera.matrixWorldInverse);
         if (-_lblCam.z < LABEL_MIN_DEPTH) { el.style.display = "none"; continue; }
 
         _lblV.project(camera);
 
-        // 画面の外(少し余裕を持たせる)は描かない
-        if (Math.abs(_lblV.x) > 1.1 || Math.abs(_lblV.y) > 1.1) {
+        const sx = (_lblV.x * 0.5 + 0.5) * w;
+        const sy = (-_lblV.y * 0.5 + 0.5) * h;
+
+        // ピクセル基準で画面外を判定(下側は少し余裕を多めに)
+        if (sx < -LABEL_SCREEN_MARGIN || sx > w + LABEL_SCREEN_MARGIN ||
+            sy < -LABEL_SCREEN_MARGIN || sy > h + LABEL_SCREEN_MARGIN) {
             el.style.display = "none";
             continue;
         }
 
         el.style.display = "block";
         el.style.transform =
-            `translate(${(_lblV.x * 0.5 + 0.5) * w}px,${(-_lblV.y * 0.5 + 0.5) * h}px) translate(-50%,-100%)`;
+            `translate(${sx}px,${sy}px) translate(-50%,-100%)`;
     }
 }
 
