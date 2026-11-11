@@ -245,6 +245,7 @@ function setNodeHasPlace(id, has){
 // 現在存在する全ノードについて、施設が紐づいているかをサーバに問い合わせて反映する。
 // (読み込み直後・Undo直後などに呼び出す)
 async function refreshAllPlaceIndicators(){
+  loadMajorLabels();   
   const ids = [...nodes.keys()];
   await Promise.all(ids.map(async id => {
     try{
@@ -606,6 +607,7 @@ function animate(){
   requestAnimationFrame(animate);
   controls.update();
   updateVisuals();
+  updateLabels();          // ← 追加
   renderer.render(scene, camera);
 }
 animate();
@@ -686,6 +688,7 @@ function renderPlaceRow(place){
         place.name = trimmed;
         label.textContent = trimmed;
         setStatus("施設名を変更しました");
+        loadMajorLabels();   // ← 追加
       } else {
         setStatus("施設名の変更に失敗しました");
       }
@@ -718,7 +721,34 @@ function renderPlaceRow(place){
     }
   });
 
+  // 主要建物チェックボックス(DB保存)
+  const major = document.createElement("input");
+  major.type = "checkbox";
+  major.className = "place-major";
+  major.title = "主要建物(常にラベル表示)";
+  major.checked = !!Number(place.is_major);
+  major.addEventListener("click", e => e.stopPropagation());
+  major.addEventListener("change", async () => {
+    const want = major.checked;
+    const nodeId = popupNodeId;
+    try{
+      const res = await fetch(`${API_BASE}/routes/place_node/major`, {
+        method:"PATCH",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ place_id: place.place_id, node_id: nodeId, is_major: want })
+      });
+      if(!res.ok) throw new Error(res.status);
+      place.is_major = want ? 1 : 0;
+      loadMajorLabels();
+      setStatus(want ? "主要建物に設定しました" : "主要建物を解除しました");
+    }catch(err){
+      major.checked = !want;   // 失敗時は元に戻す
+      setStatus("主要建物の設定に失敗しました");
+    }
+  });
+
   row.appendChild(label);
+  row.appendChild(major);
   row.appendChild(trash);
   return row;
 }
@@ -737,6 +767,8 @@ async function renderPlacePopupList(nodeId){
 
     // 取得結果に応じて、このノードの「施設あり」表示(色)を更新する。
     setNodeHasPlace(nodeId, Array.isArray(list) && list.length>0);
+    setMajorNames(nodeId, list.filter(p => Number(p.is_major)).map(p => p.name));   // ← 追加
+    
 
     placePopup.innerHTML = "";
     if(!list.length){
