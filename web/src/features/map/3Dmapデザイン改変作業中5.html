@@ -1219,12 +1219,6 @@ function getLabelAnchor(id, pos) {
 
 // 確認用の表示(情報パネルの下)
 const lblDebug = document.createElement("div");
-const flyDbg = document.createElement("div");
-flyDbg.style.cssText =
-    "position:fixed;left:0;bottom:0;z-index:999;background:rgba(0,0,0,.8);" +
-    "color:#0f0;font-size:10px;white-space:pre-line;padding:4px;max-width:100vw;pointer-events:none";
-document.body.appendChild(flyDbg);
-
 
 lblDebug.style.cssText = "margin-top:3px;font-size:8px;color:#8ff;white-space:pre-line";
 infoPanel.appendChild(lblDebug);
@@ -1247,22 +1241,6 @@ function updateLabels() {
 
         const sx = (_lblV.x * 0.5 + 0.5) * innerWidth;
         const sy = (-_lblV.y * 0.5 + 0.5) * innerHeight;
-
-
-        if (sx > innerWidth * 0.8 && sy > innerHeight * 0.8) {
-            const c = anchor.clone().applyMatrix4(camera.matrixWorldInverse);
-            const vv = window.visualViewport;
-            flyDbg.textContent =
-                `FLY ${el.textContent}\n` +
-                `scr ${sx.toFixed(0)},${sy.toFixed(0)}\n` +
-                `ndc ${_lblV.x.toFixed(2)},${_lblV.y.toFixed(2)},${_lblV.z.toFixed(4)}\n` +
-                `depth ${(-c.z).toFixed(2)}\n` +
-                `inner ${innerWidth}x${innerHeight} dpr ${devicePixelRatio}\n` +
-                `layer ${labelLayer.clientWidth}x${labelLayer.clientHeight}\n` +
-                `canvas ${renderer.domElement.clientWidth}x${renderer.domElement.clientHeight}\n` +
-                `vv ${vv ? vv.width.toFixed(0) + "x" + vv.height.toFixed(0) + " s" + vv.scale.toFixed(2) : "-"}\n` +
-                `aspect ${camera.aspect.toFixed(3)}`;
-        }
 
         if (Math.abs(sx) > innerWidth * 2 || Math.abs(sy) > innerHeight * 2) {
             el.style.display = "none";
