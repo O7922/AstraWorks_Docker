@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>遷移前(テスト)</title>
+</head>
+<body>
+<h1>遷移前(テスト)</h1>
+<h2>検索テスト覧</h2>
+<div id="searchList">読み込み中...</div>
+<h2>案内テスト覧</h2>
+<div id="guideList">読み込み中...</div>
+<script>
+// API・遷移先
+const PLACES_API_URL = "https://astrahost.astraworks.mydns.jp:3333/routes/places";
+const MAP_URL = "3Dmapデザイン改変作業中5.html";
+// sessionStorageのキー
+const KEY_MODE = "map_mode";
+const KEY_PLACE = "map_place";
+
+// 3Dmap.htmlへ遷移
+function goMap(mode, placeName) {
+    try {
+        sessionStorage.setItem(KEY_MODE, String(mode));
+        sessionStorage.setItem(KEY_PLACE, placeName);
+    } catch (e) {
+        alert("sessionStorageが使えないため遷移できません");
+        return;
+    }
+    location.href = MAP_URL;
+}
+
+// リスト表示
+function renderList(container, names, label, mode) {
+    container.innerHTML = "";
+    if (!names.length) {
+        container.textContent = "施設データがありません";
+        return;
+    }
+    names.forEach(name => {
+        const row = document.createElement("div");
+        const text = document.createElement("span");
+        text.textContent = name;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = label;
+        btn.addEventListener("click", () => {
+            goMap(mode, name);
+        });
+        row.appendChild(text);
+        row.appendChild(document.createTextNode(" "));
+        row.appendChild(btn);
+        container.appendChild(row);
+    });
+}
+// 施設データ取得
+async function loadPlaces() {
+    try {
+        const res = await fetch(PLACES_API_URL);
+        if (!res.ok) {
+            throw new Error(res.status);
+        }
+        const rawPlaces = await res.json();
+        // 施設名の重複を削除
+        const names = [
+            ...new Set(
+                rawPlaces
+                    .map(p => (p.name || "").trim())
+                    .filter(Boolean)
+            )
+        ];
+        renderList(
+            document.getElementById("searchList"),
+            names,
+            "検索",
+            0
+        );
+        renderList(
+            document.getElementById("guideList"),
+            names,
+            "道案内",
+            1
+        );
+    } catch (e) {
+        console.error("施設データの読み込みに失敗しました:", e);
+        document.getElementById("searchList").textContent =
+            "読み込みに失敗しました";
+        document.getElementById("guideList").textContent =
+            "読み込みに失敗しました";
+    }
+}
+
+// 実行
+loadPlaces();
+
+</script>
+
+</body>
+</html>
