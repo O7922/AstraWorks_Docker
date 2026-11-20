@@ -540,6 +540,11 @@ body.guiding #btnInfo { top: calc(var(--topbar-h) + 120px); }
 body.guiding #ui      { top: calc(var(--topbar-h) + 150px); }
 </style>
 
+<!-- GLBを最優先でダウンロード開始(JS実行を待たない) -->
+<link rel="preload" as="fetch" href="ジオメトリ3.glb" crossorigin="anonymous">
+<!-- Dracoデコーダも先読み -->
+<link rel="preload" as="fetch" href="./three/examples/jsm/libs/draco/gltf/draco_decoder.wasm" crossorigin="anonymous">
+<link rel="preload" as="fetch" href="./three/examples/jsm/libs/draco/gltf/draco_wasm_wrapper.js" crossorigin="anonymous">
 <script type="importmap">
 {
     "imports": {
@@ -2132,10 +2137,19 @@ dracoLoader.setDecoderPath("./three/examples/jsm/libs/draco/gltf/");
 const loader = new GLTFLoader();
 loader.setDRACOLoader(dracoLoader);
 
-Promise.all([
-    loadRouteNodes().then(loadMajorLabels),
-    loadPlacesAndLinks()
-]).then(applyPendingNavigation);
+// ノード・施設・ラベルのAPI読み込み(GLBの読み込み後に1回だけ開始)
+let dataLoadStarted = false;
+function startDataLoading() {
+    if (dataLoadStarted) return;
+    dataLoadStarted = true;
+    Promise.all([
+        loadRouteNodes().then(loadMajorLabels),
+        loadPlacesAndLinks()
+    ]).then(applyPendingNavigation);
+}
+
+// GLBを最優先で読み込む
+loader.load(
 
 loader.load(
     //"gakkou_zahyou03-軽量化2.glb",
@@ -2179,6 +2193,9 @@ loader.load(
         }
 
 
+
+        // GLBの表示が終わってから、他のデータを読み込む
+        setTimeout(startDataLoading, 0);
 
         console.log("GLB Loaded");
     },
