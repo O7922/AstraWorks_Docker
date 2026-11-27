@@ -14,6 +14,14 @@ button.active{background:#3b7ddd;color:#fff;border-color:#3b7ddd}
 #status{font-size:12px;color:#9f9;min-height:16px}
 #loading{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#fff;font-size:20px;z-index:200}
 
+/* ---------- 凡例 ---------- */
+#legend{display:flex;flex-direction:column;gap:4px;border-top:1px solid #444;padding-top:6px;font-size:11px;color:#ccc}
+.legend-row{display:flex;align-items:center;gap:6px}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.legend-dot.normal{background:#00ff88}
+.legend-dot.has-place{background:#ff9900}
+.legend-dot.selected{background:#ffcc00}
+
 /* ---------- 施設ポップアップ ---------- */
 #placePopup{
   position:absolute; z-index:300; display:none;
@@ -42,15 +50,31 @@ button.active{background:#3b7ddd;color:#fff;border-color:#3b7ddd}
 .place-add-btn:hover{background:#2a2a2a}
 .place-add-wrap{border-top:1px solid #444; margin-top:4px; padding-top:4px;}
 .place-popup-loading{padding:6px; color:#aaa;}
+.place-row .place-major{flex-shrink:0; cursor:pointer; accent-color:#ff9900; margin:0;}
+
+#labelLayer{position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; overflow:hidden; z-index:50;}
+.major-label{
+  position:absolute; left:0; top:0; white-space:nowrap;
+  background:rgba(0,0,0,.7); color:#fff; border:1px solid #ff9900;
+  padding:2px 7px; border-radius:4px; font-size:12px; font-weight:bold;
+  text-shadow:0 0 2px #000;
+}
+
+
 </style>
 <script type="importmap">
-{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js"}}
+{
+    "imports": {
+        "three": "./three/three.module.js"
+    }
+}
 </script>
 </head>
 <body>
 <div id="loading">Loading GLB...</div>
 <div id="ui">
   <div class="row">
+    <button id="tPen" title="ドラッグで連続配置">✏️ ペン</button> 
     <button id="tEraser" title="消しゴム">🧹 消去</button>
     <button id="tNode" title="ノード">⚪ ノード</button>
     <button id="tLink" title="リンク">🔗 リンク</button>
@@ -59,24 +83,47 @@ button.active{background:#3b7ddd;color:#fff;border-color:#3b7ddd}
     <button id="tView">表示:3D実体</button>
     <button id="tSave">💾 保存</button>
   </div>
+  
+  <div class="row" style="align-items:center">
+    <span>ペン太さ</span>
+    <button id="penMinus">−</button>
+    <span id="penVal" style="min-width:20px;text-align:center">1</span>
+    <button id="penPlus">＋</button>
+  </div>
+
   <div id="status"></div>
+  <div id="legend">
+    <div class="legend-row"><span class="legend-dot normal"></span>施設未登録ノード</div>
+    <div class="legend-row"><span class="legend-dot has-place"></span>施設登録済みノード</div>
+    <div class="legend-row"><span class="legend-dot selected"></span>選択中ノード</div>
+  </div>
 </div>
 
 <!-- 施設一覧ポップアップ(ノードを右クリックで表示) -->
+<div id="labelLayer"></div>
 <div id="placePopup"></div>
 
 <script type="module">
 import * as THREE from "three";
-import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/controls/OrbitControls.js";
-import { TransformControls } from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/controls/TransformControls.js";
-import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js";
+
+import { OrbitControls } from
+    "./three/examples/jsm/controls/OrbitControls.js";
+
+import { TransformControls } from
+    "./three/examples/jsm/controls/TransformControls.js";
+
+import { GLTFLoader } from
+    "./three/examples/jsm/loaders/GLTFLoader.js";
+
+import { DRACOLoader } from
+    "./three/examples/jsm/loaders/DRACOLoader.js";
 
 const $ = id => document.getElementById(id);
 const statusEl = $("status");
 const setStatus = s => statusEl.textContent = s;
 
 // APIサーバのベースURL(route_editor3D保存/読込と同じサーバを想定)
-const API_BASE = "https://192.168.137.1:3333";
+const API_BASE = "https://astrahost.astraworks.mydns.jp:3333";
 
 // ---------- Three.js 基本セットアップ ----------
 const scene = new THREE.Scene();
@@ -89,6 +136,8 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
+// 平行移動の感度
+controls.panSpeed = 3.0;
 
 // ---------- ホイールズームの鈍化対策 ----------
 controls.enableZoom = false;
@@ -132,7 +181,14 @@ scene.add(dLight);
 
 // ---------- 地形(terrain) ----------
 let terrain = null;
-new GLTFLoader().load("gakkou_zahyou03-軽量化.glb", gltf => {
+
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath("./three/examples/jsm/libs/draco/gltf/");
+
+const gltfLoader = new GLTFLoader();
+gltfLoader.setDRACOLoader(dracoLoader);
+
+gltfLoader.load("ジオメトリ3.glb", gltf => {
   terrain = gltf.scene;
   scene.add(terrain);
   const box = new THREE.Box3().setFromObject(terrain);
@@ -153,21 +209,26 @@ new GLTFLoader().load("gakkou_zahyou03-軽量化.glb", gltf => {
 // peers は Set(隣接ノードID) ではなく Map(隣接ノードID -> ユークリッド距離) にする。
 // ノード作成・移動(ドラッグ)のたびに距離を再計算して保持し、
 // 保存時にそのままDBへ送る(3Dmap_alpha側で毎回x,y,zから距離を再計算しなくて済むようにする)。
+//
+// 【追加改造点】
+// 各ノードが「施設(place)を1件以上紐づけているか」を hasPlace フラグとして保持し、
+// マテリアル(色)を切り替えることで一目で分かるようにする。
 const nodesGroup = new THREE.Group(); scene.add(nodesGroup);
 const linksGroup = new THREE.Group(); scene.add(linksGroup);
 let nodeSeq = 0;
-const nodes = new Map(); // id -> {mesh, peers: Map(nodeId -> dist)}
+const nodes = new Map(); // id -> {mesh, peers: Map(nodeId -> dist), hasPlace: boolean}
 const linkMeshes = new Map(); // pairKey("a|b") -> {mesh, a, b}
 
 function pairKey(a, b){
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
-const NODE_MAT = new THREE.MeshBasicMaterial({color:0x00ff88});
-const NODE_MAT_SEL = new THREE.MeshBasicMaterial({color:0xffcc00});
+const NODE_MAT = new THREE.MeshBasicMaterial({color:0x00ff88});          // 施設未登録
+const NODE_MAT_HAS = new THREE.MeshBasicMaterial({color:0xff9900});      // 施設登録済み
+const NODE_MAT_SEL = new THREE.MeshBasicMaterial({color:0xffcc00});      // 選択中
 const LINK_MAT = new THREE.MeshBasicMaterial({color:0x3b7ddd});
-const REAL_RADIUS = 0.5;
-const REAL_LINK_R = 0.15;
+const REAL_RADIUS = 4.0;
+const REAL_LINK_R = 1.2;
 const SCREEN_K = 0.012;
 
 function addNode(pos, forceId=null){
@@ -176,8 +237,33 @@ function addNode(pos, forceId=null){
   mesh.position.copy(pos);
   mesh.userData = {type:"node", id};
   nodesGroup.add(mesh);
-  nodes.set(id, {mesh, peers:new Map()});
+  nodes.set(id, {mesh, peers:new Map(), hasPlace:false});
   return id;
+}
+
+// ノードの「施設あり/なし」状態を反映し、選択中でなければマテリアルを即座に切り替える。
+function setNodeHasPlace(id, has){
+  const n = nodes.get(id);
+  if(!n) return;
+  n.hasPlace = !!has;
+  if(id !== selectedNode){
+    n.mesh.material = n.hasPlace ? NODE_MAT_HAS.clone() : NODE_MAT.clone();
+  }
+}
+
+// 現在存在する全ノードについて、施設が紐づいているかをサーバに問い合わせて反映する。
+// (読み込み直後・Undo直後などに呼び出す)
+async function refreshAllPlaceIndicators(){
+  loadMajorLabels();   
+  const ids = [...nodes.keys()];
+  await Promise.all(ids.map(async id => {
+    try{
+      const res = await fetch(`${API_BASE}/routes/place_node?node_id=${encodeURIComponent(id)}`);
+      if(!res.ok) return;
+      const list = await res.json();
+      setNodeHasPlace(id, Array.isArray(list) && list.length>0);
+    }catch(e){ /* このノードだけ失敗しても他には影響させない */ }
+  }));
 }
 
 // aId-bId 間にリンク(peer関係)を作成する。既にpeerなら何もしない。
@@ -234,6 +320,91 @@ function removeNode(id){
   nodes.delete(id);
 }
 
+// ---------- ペン(ブラシ)機能 ----------
+let penSize = 1;
+const PEN_MAX = 120;
+const PEN_SPACING = REAL_RADIUS * 2.5;     // ノード間隔(ノード直径より少し広め)
+const LINK_MARGIN = REAL_RADIUS * 2 * 3;   // 既存ノードとの自動接続範囲に足す余白(ノードサイズ×3)
+const downRay = new THREE.Raycaster();
+const DOWN = new THREE.Vector3(0, -1, 0);
+
+function setPenSize(n){
+  penSize = Math.max(1, Math.min(PEN_MAX, n));
+  $("penVal").textContent = penSize;
+  setStatus(`ペン太さ: ${penSize}`);
+}
+$("penMinus").onclick = () => setPenSize(penSize - 1);
+$("penPlus").onclick  = () => setPenSize(penSize + 1);
+window.addEventListener("keydown", e => {
+  if(e.key === "[") setPenSize(penSize - 1);
+  if(e.key === "]") setPenSize(penSize + 1);
+});
+
+// center を中心に n×n のノードを格子状に配置し、
+// 格子内を相互リンク、さらに周囲の既存ノードとも自動リンクする。
+function placeBrush(center, n){
+  if(n <= 1){ addNode(center); return 1; }
+
+  const existingIds = [...nodes.keys()];   // 配置前から存在するノード
+  const topY = new THREE.Box3().setFromObject(terrain).max.y + 10;
+  const half = (n - 1) / 2;
+    // カメラの向きから、水平面上の「右」「奥」ベクトルを作る
+  const fwd = new THREE.Vector3();
+  camera.getWorldDirection(fwd);
+  fwd.y = 0;
+  if(fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);   // 真上/真下から見ている場合の保険
+  fwd.normalize();
+  const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+
+  // 1. 格子を作成。各点を真上から真下へレイキャストして高さを地形にフィットさせる
+  const grid = [];
+  const newIds = [];
+  for(let j = 0; j < n; j++){
+    grid.push([]);
+    for(let i = 0; i < n; i++){
+      const x = center.x + right.x * (i - half) * PEN_SPACING + fwd.x * (j - half) * PEN_SPACING;
+      const z = center.z + right.z * (i - half) * PEN_SPACING + fwd.z * (j - half) * PEN_SPACING;
+      downRay.set(new THREE.Vector3(x, topY, z), DOWN);
+      const hit = downRay.intersectObject(terrain, true);
+      let id = null;
+      if(hit.length){ id = addNode(hit[0].point); newIds.push(id); }
+      grid[j].push(id);   // 地形外は null
+    }
+  }
+  if(!newIds.length) return 0;
+
+  // 2. 格子内の縦横リンク
+  for(let j = 0; j < n; j++){
+    for(let i = 0; i < n; i++){
+      const a = grid[j][i];
+      if(!a) continue;
+      if(i + 1 < n && grid[j][i+1]) addLink(a, grid[j][i+1]);
+      if(j + 1 < n && grid[j+1][i]) addLink(a, grid[j+1][i]);
+    }
+  }
+
+  // 3. 周囲の既存ノードとの自動リンク
+  //    範囲 = 最外周ノードまでの距離 + ノードサイズ×3
+  let outer = 0;
+  newIds.forEach(id => {
+    outer = Math.max(outer, nodes.get(id).mesh.position.distanceTo(center));
+  });
+  const range = outer + LINK_MARGIN;
+  existingIds.forEach(eid => {
+    const ep = nodes.get(eid).mesh.position;
+    if(ep.distanceTo(center) > range) return;
+    // 既存ノードは、最も近い新規ノードと接続する
+    let best = null, bestD = Infinity;
+    newIds.forEach(nid => {
+      const d = ep.distanceTo(nodes.get(nid).mesh.position);
+      if(d < bestD){ bestD = d; best = nid; }
+    });
+    if(best) addLink(eid, best);
+  });
+
+  return newIds.length;
+}
+
 // ---------- 見た目の更新(2D規定サイズ / 3D実体) ----------
 let viewMode = "3d";
 function updateVisuals(){
@@ -286,6 +457,8 @@ function restoreState(state){
   state.nodes.forEach(nd => {
     (nd.peers||[]).forEach(p => addLink(nd.id, typeof p === "string" ? p : p.id));
   });
+  // Undo/Redoでノード構成が変わったので、施設有無の表示も再取得して反映する。
+  refreshAllPlaceIndicators();
 }
 function undo(){
   if(!historyStack.length){ setStatus("これ以上戻せません"); return; }
@@ -296,22 +469,100 @@ window.addEventListener("keydown", e => {
   if(e.ctrlKey && (e.key==="z"||e.key==="Z")){ e.preventDefault(); undo(); }
 });
 
+
+// ---------- ペンモード(ドラッグで連続配置) ----------
+let penDrawing = false;
+let penLastId = null;     // 直前に描いたノード
+let penCount = 0;
+let penTopY = 0;
+
+function pickTerrain(e){
+  if(!terrain) return null;
+  mouse.x = (e.clientX/innerWidth)*2-1;
+  mouse.y = -(e.clientY/innerHeight)*2+1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObject(terrain, true);
+  return hits.length ? hits[0] : null;
+}
+
+function startPenStroke(e, nodeHits){
+  if(!terrain) return;
+  let startId = null, created = 0;
+  pushHistory();   // 1ストローク = 1回のUndo
+  if(nodeHits.length){
+    startId = nodeHits[0].object.userData.id;
+  } else {
+    const hit = pickTerrain(e);
+    if(!hit) return;
+    startId = addNode(hit.point);
+    created = 1;
+  }
+  penTopY = new THREE.Box3().setFromObject(terrain).max.y + 10;
+  penLastId = startId;
+  penCount = created;
+  penDrawing = true;
+  renderer.domElement.setPointerCapture?.(e.pointerId);
+}
+
+function continuePenStroke(e){
+  if(!penDrawing) return;
+  const last = nodes.get(penLastId);
+  if(!last){ penDrawing = false; return; }
+  const hit = pickTerrain(e);
+  if(!hit) return;
+
+  const from = last.mesh.position;
+  const dx = hit.point.x - from.x, dz = hit.point.z - from.z;
+  const dist = Math.hypot(dx, dz);
+  if(dist < PEN_SPACING) return;
+
+  const ux = dx/dist, uz = dz/dist;
+  const steps = Math.min(Math.floor(dist / PEN_SPACING), 200);
+  let cx = from.x, cz = from.z;
+  for(let i = 0; i < steps; i++){
+    cx += ux * PEN_SPACING;
+    cz += uz * PEN_SPACING;
+    downRay.set(new THREE.Vector3(cx, penTopY, cz), DOWN);
+    const h = downRay.intersectObject(terrain, true);
+    if(!h.length) continue;
+    const id = addNode(h[0].point);
+    addLink(penLastId, id);   // 直前のノードと自動リンク
+    penLastId = id;
+    penCount++;
+  }
+}
+
+function endPenStroke(){
+  if(!penDrawing) return;
+  penDrawing = false;
+  penLastId = null;
+  setStatus(`ペン: ${penCount}個のノードを描画しました`);
+}
+
+
 // ---------- ツール/モード ----------
 let tool = null;
 let pendingLinkNode = null;
 let selectedNode = null;
 
-const tEraser=$("tEraser"), tNode=$("tNode"), tLink=$("tLink"), tView=$("tView"), tSave=$("tSave");
+const tPen=$("tPen"), tEraser=$("tEraser"), tNode=$("tNode"), tLink=$("tLink"), tView=$("tView"), tSave=$("tSave");
 function setTool(t){
   tool = (tool===t) ? null : t;
   pendingLinkNode = null;
-  [tEraser,tNode,tLink].forEach(b=>b.classList.remove("active"));
+  penDrawing = false; penLastId = null;
+  [tPen,tEraser,tNode,tLink].forEach(b=>b.classList.remove("active"));
+  if(tool==="pen") tPen.classList.add("active");
   if(tool==="eraser") tEraser.classList.add("active");
   if(tool==="node") tNode.classList.add("active");
   if(tool==="link") tLink.classList.add("active");
+
+  // ペン中は左ドラッグでカメラが回らないようにする
+  controls.mouseButtons.LEFT = (tool==="pen") ? null : THREE.MOUSE.ROTATE;
+
   setStatus(tool ? `ツール: ${tool}` : "選択/移動モード");
   if(tool){ selectNode(null); }
 }
+tPen.onclick=()=>setTool("pen");
 tEraser.onclick=()=>setTool("eraser");
 tNode.onclick=()=>setTool("node");
 tLink.onclick=()=>setTool("link");
@@ -367,6 +618,9 @@ async function loadFromServer(){
     });
 
     setStatus(`読み込み完了: ノード${nodeList.length}件 / リンク${linkCount}件`);
+
+    // 3. 各ノードの施設登録有無を取得してノードの色に反映する
+    refreshAllPlaceIndicators();
   }catch(e){
     setStatus("読み込み失敗: APIサーバ未接続");
   }
@@ -389,7 +643,9 @@ xform.addEventListener("objectChange", () => {
 
 function selectNode(id){
   if(selectedNode){
-    nodes.get(selectedNode).mesh.material = NODE_MAT.clone();
+    // 選択解除時は、施設有無に応じた色(通常/施設あり)に戻す。
+    const prev = nodes.get(selectedNode);
+    if(prev) prev.mesh.material = prev.hasPlace ? NODE_MAT_HAS.clone() : NODE_MAT.clone();
   }
   selectedNode = id;
   if(id){
@@ -421,6 +677,8 @@ renderer.domElement.addEventListener("pointerdown", e => {
   const nodeHits = raycaster.intersectObjects(nodesGroup.children);
   const linkHits = raycaster.intersectObjects(linksGroup.children);
 
+  if(tool==="pen"){ startPenStroke(e, nodeHits); return; } 
+
   if(tool==="eraser"){
     if(nodeHits.length){ pushHistory(); removeNode(nodeHits[0].object.userData.id); selectNode(null); setStatus("ノードを削除"); }
     else if(linkHits.length){ pushHistory(); removeLinkByKey(linkHits[0].object.userData.key); setStatus("リンクを削除"); }
@@ -439,13 +697,21 @@ renderer.domElement.addEventListener("pointerdown", e => {
     if(nodeHits.length) return;
     if(!terrain) return;
     const hits = raycaster.intersectObject(terrain, true);
-    if(hits.length){ pushHistory(); addNode(hits[0].point); setStatus("ノードを設置しました"); }
+    if(hits.length){
+      pushHistory();   // 1クリック=1回のUndo
+      const cnt = placeBrush(hits[0].point, penSize);
+      setStatus(`ノードを${cnt}個設置しました (ペン${penSize})`);
+    }
     return;
   }
 
   if(nodeHits.length){ selectNode(nodeHits[0].object.userData.id); setStatus("ノードを選択(ドラッグで微調整)"); }
   else { selectNode(null); }
 });
+
+renderer.domElement.addEventListener("pointermove", continuePenStroke);
+window.addEventListener("pointerup", endPenStroke);
+window.addEventListener("pointercancel", endPenStroke);
 
 // DELキーで削除
 window.addEventListener("keydown", e => {
@@ -456,6 +722,61 @@ window.addEventListener("keydown", e => {
     setStatus("ノードを削除(DEL)");
   }
 });
+
+// ---------- 主要建物の常時ラベル表示 ----------
+const labelLayer = $("labelLayer");
+const majorNames = new Map(); // nodeId -> string[]
+const labelEls = new Map();   // nodeId -> HTMLElement
+
+function setMajorNames(nodeId, names){
+  if(!names.length){
+    majorNames.delete(nodeId);
+    const el = labelEls.get(nodeId);
+    if(el){ el.remove(); labelEls.delete(nodeId); }
+    return;
+  }
+  majorNames.set(nodeId, names);
+  let el = labelEls.get(nodeId);
+  if(!el){
+    el = document.createElement("div");
+    el.className = "major-label";
+    labelLayer.appendChild(el);
+    labelEls.set(nodeId, el);
+  }
+  el.textContent = names.join(" / ");
+}
+
+// サーバから主要建物一覧を取得して全ラベルを同期する
+async function loadMajorLabels(){
+  try{
+    const res = await fetch(`${API_BASE}/routes/place_node/majors`);
+    if(!res.ok) return;
+    const rows = await res.json();
+    const map = new Map();
+    rows.forEach(r => {
+      if(!map.has(r.node_id)) map.set(r.node_id, []);
+      map.get(r.node_id).push(r.name);
+    });
+    for(const id of [...majorNames.keys()]) if(!map.has(id)) setMajorNames(id, []);
+    map.forEach((names, id) => setMajorNames(id, names));
+  }catch(e){ /* 失敗しても編集機能には影響させない */ }
+}
+
+const _lblV = new THREE.Vector3();
+function updateLabels(){
+  const w = innerWidth, h = innerHeight;
+  for(const [id, el] of labelEls){
+    const n = nodes.get(id);
+    if(!n){ el.style.display = "none"; continue; }
+    _lblV.copy(n.mesh.position);
+    _lblV.y += n.mesh.scale.y * 1.6;   // ノードの少し上に表示
+    _lblV.project(camera);
+    if(_lblV.z > 1 || _lblV.z < -1){ el.style.display = "none"; continue; }
+    el.style.display = "block";
+    el.style.transform =
+      `translate(${(_lblV.x*0.5+0.5)*w}px,${(-_lblV.y*0.5+0.5)*h}px) translate(-50%,-100%)`;
+  }
+}
 
 // ---------- リサイズ/アニメーション ----------
 window.addEventListener("resize", () => {
@@ -468,6 +789,7 @@ function animate(){
   requestAnimationFrame(animate);
   controls.update();
   updateVisuals();
+  updateLabels();          // ← 追加
   renderer.render(scene, camera);
 }
 animate();
@@ -479,6 +801,11 @@ animate();
 //       実際には施設名は places のみに保存されるため、更新APIはplacesだけを書き換える)
 //   ・一覧の各行右側のゴミ箱 : そのノードとの紐づけのみ削除(place_node_linkの該当行を削除)
 //   ・登録が無ければ「＋」だけを表示。「＋」から新規施設を作成して紐づける。
+//
+// 【追加改造点】
+// 一覧を取得するたびに、そのノードの hasPlace 状態(=一覧が1件以上あるか)を
+// setNodeHasPlace() で更新する。これにより、施設の追加/削除/ポップアップを開いた
+// タイミングで、常にノードの色が最新の状態に保たれる。
 // ==========================================================================
 const placePopup = $("placePopup");
 let popupNodeId = null;
@@ -505,7 +832,7 @@ function makeAddButton(){
       });
       if(res.ok){
         setStatus("施設を追加しました");
-        // 一覧を再取得して表示を更新
+        // 一覧を再取得して表示を更新(この中でノードの色も更新される)
         renderPlacePopupList(popupNodeId);
       } else {
         setStatus("施設の追加に失敗しました");
@@ -543,6 +870,7 @@ function renderPlaceRow(place){
         place.name = trimmed;
         label.textContent = trimmed;
         setStatus("施設名を変更しました");
+        loadMajorLabels();   // ← 追加
       } else {
         setStatus("施設名の変更に失敗しました");
       }
@@ -550,6 +878,8 @@ function renderPlaceRow(place){
       setStatus("施設名の変更に失敗: APIサーバ未接続");
     }
   });
+
+  
 
   const trash = document.createElement("span");
   trash.className = "place-trash";
@@ -565,6 +895,7 @@ function renderPlaceRow(place){
       );
       if(res.ok){
         setStatus("施設の紐づけを削除しました");
+        // 一覧を再取得して表示を更新(この中でノードの色も更新される)
         renderPlacePopupList(popupNodeId);
       } else {
         setStatus("削除に失敗しました");
@@ -574,7 +905,34 @@ function renderPlaceRow(place){
     }
   });
 
+  // 主要建物チェックボックス(DB保存)
+  const major = document.createElement("input");
+  major.type = "checkbox";
+  major.className = "place-major";
+  major.title = "主要建物(常にラベル表示)";
+  major.checked = !!Number(place.is_major);
+  major.addEventListener("click", e => e.stopPropagation());
+  major.addEventListener("change", async () => {
+    const want = major.checked;
+    const nodeId = popupNodeId;
+    try{
+      const res = await fetch(`${API_BASE}/routes/place_node/major`, {
+        method:"PATCH",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ place_id: place.place_id, node_id: nodeId, is_major: want })
+      });
+      if(!res.ok) throw new Error(res.status);
+      place.is_major = want ? 1 : 0;
+      loadMajorLabels();
+      setStatus(want ? "主要建物に設定しました" : "主要建物を解除しました");
+    }catch(err){
+      major.checked = !want;   // 失敗時は元に戻す
+      setStatus("主要建物の設定に失敗しました");
+    }
+  });
+
   row.appendChild(label);
+  row.appendChild(major);
   row.appendChild(trash);
   return row;
 }
@@ -590,6 +948,11 @@ async function renderPlacePopupList(nodeId){
     const res = await fetch(`${API_BASE}/routes/place_node?node_id=${encodeURIComponent(nodeId)}`);
     if(!res.ok) throw new Error(res.status);
     const list = await res.json();
+
+    // 取得結果に応じて、このノードの「施設あり」表示(色)を更新する。
+    setNodeHasPlace(nodeId, Array.isArray(list) && list.length>0);
+    setMajorNames(nodeId, list.filter(p => Number(p.is_major)).map(p => p.name));   // ← 追加
+    
 
     placePopup.innerHTML = "";
     if(!list.length){
@@ -643,7 +1006,11 @@ renderer.domElement.addEventListener("contextmenu", e => {
     openPlacePopupForNode(id, e.clientX, e.clientY);
   } else {
     hidePlacePopup();
-  }
+  } 
+
+
+
+  
 });
 
 // ポップアップ外を左クリックしたら閉じる
