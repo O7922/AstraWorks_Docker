@@ -1,0 +1,271 @@
+#!/bin/bash
+set -Eeuo pipefail
+exec > >(tee -a /var/log/user-data-setup.log) 2>&1
+trap 'echo "ERROR: line ${LINENO}, exit code $?"' ERR
+
+echo "===== 1. Install packages ====="
+dnf install -y httpd mod_ssl openssl git docker python3 curl-minimal
+
+echo "===== 2. SSL certificate ====="
+CERT_HOST="astraworks.mydns.jp"
+
+mkdir -p /etc/httpd/ssl
+
+cat > /etc/httpd/ssl/server.crt <<'EOF'
+-----BEGIN CERTIFICATE-----
+MIIDkzCCAxmgAwIBAgISBsolhS3Qx9ivJo1fxaI1gBw6MAoGCCqGSM49BAMDMDMx
+CzAJBgNVBAYTAlVTMRYwFAYDVQQKEw1MZXQncyBFbmNyeXB0MQwwCgYDVQQDEwNZ
+RTIwHhcNMjYxMTI1MDYwODI5WhcNMjcwMjIzMDYwODI4WjAeMRwwGgYDVQQDExNh
+c3RyYXdvcmtzLm15ZG5zLmpwMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAELaXB
+1s51oxstcA2HxxS91A62almXp96RsC0E7LWI1M7fNe1uM9WvXLqbwniwarqAvSFd
+MiKOmTrVtpEiiSD2CKOCAiAwggIcMA4GA1UdDwEB/wQEAwIHgDATBgNVHSUEDDAK
+BggrBgEFBQcDATAMBgNVHRMBAf8EAjAAMB0GA1UdDgQWBBQoNuS+n3bWOVcz8QBU
+i811pNLMbDAfBgNVHSMEGDAWgBS5WfKOzyLwhtM3SP92FBi6gthVhzAzBggrBgEF
+BQcBAQQnMCUwIwYIKwYBBQUHMAKGF2h0dHA6Ly95ZTIuaS5sZW5jci5vcmcvMB4G
+A1UdEQQXMBWCE2FzdHJhd29ya3MubXlkbnMuanAwEwYDVR0gBAwwCjAIBgZngQwB
+AgEwLgYDVR0fBCcwJTAjoCGgH4YdaHR0cDovL3llMi5jLmxlbmNyLm9yZy81OS5j
+cmwwggELBgorBgEEAdZ5AgQCBIH8BIH5APcAdQBGojlnxg22RofGbz35mZR2k6am
+ESCEV9VV5+PQodm2RgAAAaIRh3ZAAAAEAwBGMEQCIEUVlgvN/l6wWJx2gigi8uzM
+hu5BbBokI3A8k24hQY0YAiBbKORaQwAYKNb/JNarDzlReRITIkrtTbOzuiQDn/ji
+5QB+AFlubDOGlLJZcqJWyKDo3ZBKdugIPdqHOwEIOCgUPO5ZAAABohGHdoIACAAA
+BQAwK1alBAMARzBFAiEArYV+Oiqt+mhpBSErvUTN8BT7RsKelOLgRCh8GTZqpHEC
+IHVoK1+EPwRoAxKhX+lLU4QwrpmzYjegYvSpkwei1/ZUMAoGCCqGSM49BAMDA2gA
+MGUCMQCSmKFdiH/9YzA4HBacX8K3VDx16SNGX5sEX5omKveLyPMz8i986ku/Vhdt
+89p2BZYCMEnsbUHGDID1SG/o0yMYrzvmwt7k26hrELhXYLH9uu3bYuOav8HH+5lN
+quHtqeKlWQ==
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+MIICjDCCAhGgAwIBAgIQTfOxXdbAeExQfNN7WObxFTAKBggqhkjOPQQDAzAuMQsw
+CQYDVQQGEwJVUzENMAsGA1UEChMESVNSRzEQMA4GA1UEAxMHUm9vdCBZRTAeFw0y
+NTA5MDMwMDAwMDBaFw0yODA5MDIyMzU5NTlaMDMxCzAJBgNVBAYTAlVTMRYwFAYD
+VQQKEw1MZXQncyBFbmNyeXB0MQwwCgYDVQQDEwNZRTIwdjAQBgcqhkjOPQIBBgUr
+gQQAIgNiAARxmrQzkdbEEL3MqXt3dJQttYc47axkdDTHud5TPqM2z5uSD5cmk0Wr
+HlWXvnlvqBLqiB34kluxIbmMyAiq3/YD6e80/vV259K8XQIdjFXloYOa0mIU71f7
+HQ09PvYDlw+jge4wgeswDgYDVR0PAQH/BAQDAgGGMBMGA1UdJQQMMAoGCCsGAQUF
+BwMBMBIGA1UdEwEB/wQIMAYBAf8CAQAwHQYDVR0OBBYEFLlZ8o7PIvCG0zdI/3YU
+GLqC2FWHMB8GA1UdIwQYMBaAFKPIJlqOoUzQNWP8myPIOq5W809WMDIGCCsGAQUF
+BwEBBCYwJDAiBggrBgEFBQcwAoYWaHR0cDovL3llLmkubGVuY3Iub3JnLzATBgNV
+HSAEDDAKMAgGBmeBDAECATAnBgNVHR8EIDAeMBygGqAYhhZodHRwOi8veWUuYy5s
+ZW5jci5vcmcvMAoGCCqGSM49BAMDA2kAMGYCMQDIcnw5dcZLN9ffynXnnkLD/itS
+JEycJPb3sRkzeqBowup7vOsAwaqoCnNn/jh9wycCMQCJM6CPlaOC4pQYYbJtVPYb
+DKrIb2EKk5NpOpE6/XttQYZV/3gilB9l+Cc/DOVwmyg=
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+MIICpjCCAiugAwIBAgIRAIchZfw0tuX7qK3Vs3BftTowCgYIKoZIzj0EAwMwTzEL
+MAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2VhcmNo
+IEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDIwHhcNMjYwNTEzMDAwMDAwWhcN
+MzIwOTAyMjM1OTU5WjAuMQswCQYDVQQGEwJVUzENMAsGA1UEChMESVNSRzEQMA4G
+A1UEAxMHUm9vdCBZRTB2MBAGByqGSM49AgEGBSuBBAAiA2IABDwS/6vhrcVqcbBo
++wgdI3fwn9x7DNJJOY/lTOti0vkwuRN87RhEhTH17E7XyFjWsPYhIPt/wzOqxTd2
+b+4ZJNy9ID04YywF9U5zasDVyGSNErVNtz8uSGh5izW87j77GaOB6zCB6DAOBgNV
+HQ8BAf8EBAMCAQYwEwYDVR0lBAwwCgYIKwYBBQUHAwEwDwYDVR0TAQH/BAUwAwEB
+/zAdBgNVHQ4EFgQUo8gmWo6hTNA1Y/ybI8g6rlbzT1YwHwYDVR0jBBgwFoAUfEKW
+rt5LSDv6kviejM9ti6lyN5UwMgYIKwYBBQUHAQEEJjAkMCIGCCsGAQUFBzAChhZo
+dHRwOi8veDIuaS5sZW5jci5vcmcvMBMGA1UdIAQMMAowCAYGZ4EMAQIBMCcGA1Ud
+HwQgMB4wHKAaoBiGFmh0dHA6Ly94Mi5jLmxlbmNyLm9yZy8wCgYIKoZIzj0EAwMD
+aQAwZgIxAMU19WCtmxVND8UHBZRoma49Z7jPs64Dma0eTu1OChVbB/2J7GV3nvYK
+Ax54uk1G9QIxAO0miLVJu8PLNiXXXkiE/gsK3CTRTF/aeo4bMX42Zw40csRU6AC2
+6hSW1/IWaas6dg==
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+MIIEcDCCAligAwIBAgIQbI8dxyfHEX97r4U6yYD5zTANBgkqhkiG9w0BAQsFADBP
+MQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJuZXQgU2VjdXJpdHkgUmVzZWFy
+Y2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBYMTAeFw0yNjA1MTMwMDAwMDBa
+Fw0zMjA5MDIyMzU5NTlaME8xCzAJBgNVBAYTAlVTMSkwJwYDVQQKEyBJbnRlcm5l
+dCBTZWN1cml0eSBSZXNlYXJjaCBHcm91cDEVMBMGA1UEAxMMSVNSRyBSb290IFgy
+MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEzZvVn4CDCuwJSvMWSj5cz3es3mcFDR0H
+ttwW+1qLFNvicWDEukWVEYmO6gbf9yoWHKS5xcUy4APgHoIYOIvXRdgKam7mAHf7
+AlF9ItgKbppbd9/w+kHsOdx1ymgHDB/qo4H1MIHyMA4GA1UdDwEB/wQEAwIBBjAd
+BgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDwYDVR0TAQH/BAUwAwEB/zAd
+BgNVHQ4EFgQUfEKWrt5LSDv6kviejM9ti6lyN5UwHwYDVR0jBBgwFoAUebRZ5nu2
+5eQBc4AIiMgaWPbpm24wMgYIKwYBBQUHAQEEJjAkMCIGCCsGAQUFBzAChhZodHRw
+Oi8veDEuaS5sZW5jci5vcmcvMBMGA1UdIAQMMAowCAYGZ4EMAQIBMCcGA1UdHwQg
+MB4wHKAaoBiGFmh0dHA6Ly94MS5jLmxlbmNyLm9yZy8wDQYJKoZIhvcNAQELBQAD
+ggIBAD2/e9frmMxNpCV03qUHegg+MV2wz9644YoXdqtH8RyWYcBO7xfjjGEXdU1e
+/o0OkEFiynUCOSIk/vLLo7ttz6CPAeNlWfC0XNkoGeWgK6jjXvozBaGuGH5n0Ufo
+shMeWTuURqNN5G00sSXDTBrpp2+mgvdZQjb8K11TYMA25QA+YHNfbIEL0BniAhKS
+2gsnJjSzrdZLI+EZ7SEyqdR2rkjd1KutLDU+n3TFyxjniZVGur4YlhMP3mY/dV95
+IruAkkjOZier6hGBdEgZXXvaCz9u9iVEadsIE75pAGL8oHV5vxdARDiotRpul1IN
+/UZwzAbrfUFcw1HkAcYD/mlZfnQ2ieCF2MS7j3Vhv7JPDKp45fmykmzYNSrumRW0
+upFFKDBOoF7hsOb7oLyHS+Uft6jOUfOrogj8YUx38hKb2K20r42OgsSdDdxdeYWc
+MS3Sb6mwJeSZEYxJ2gaXnDSPaKhhrNkYwljyVQyr4Nq+MEJytXNTnHqaAcrNwZlV
+pcJL1KBnMrMjP7eanvUwL3FYj3cF17jtboLt7gLoi4+2rWZFvn+w54jmd/FIuhhZ
+cEaU/wvU6BUNMtcVquVGHp7itQeDth5j+XL3j4WJ2SABwzUl6OeYdgpIt/ITZa+p
+TT0mQ/r5XyA4MEAiabn7XJjvCERlF2dcn2wqJw+CreTkkQ2R
+-----END CERTIFICATE-----
+EOF
+
+cat > /etc/httpd/ssl/server.key <<'EOF'
+-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgv/+18awVYYkqfSBQ
+yMD+dAdpORRE0YwMCcdwgYIBXxihRANCAAQtpcHWznWjGy1wDYfHFL3UDrZqWZen
+3pGwLQTstYjUzt817W4z1a9cupvCeLBquoC9IV0yIo6ZOtW2kSKJIPYI
+-----END PRIVATE KEY-----
+EOF
+
+chmod 600 /etc/httpd/ssl/server.key
+
+echo "===== 3. Apache configuration ====="
+
+# Apacheの80番待受を停止（Dockerが使用）
+sed -i -E \
+  's/^[[:space:]]*Listen[[:space:]]+80([[:space:]]*)$/# Listen 80 disabled for Docker/' \
+  /etc/httpd/conf/httpd.conf
+
+# Apache標準のSSL VirtualHostを削除
+python3 - <<'PY'
+import re
+
+p = "/etc/httpd/conf.d/ssl.conf"
+
+try:
+    s = open(p).read()
+    s = re.sub(
+        r'<VirtualHost _default_:443>.*?</VirtualHost>',
+        '',
+        s,
+        flags=re.S
+    )
+    open(p, 'w').write(s)
+except FileNotFoundError:
+    pass
+PY
+
+# 3333番ポートの待受を追加
+cat > /etc/httpd/conf.d/listen-3333.conf <<'EOF'
+Listen 3333
+EOF
+
+# リバースプロキシ設定
+cat > /etc/httpd/conf.d/reverseproxy.conf <<EOF
+# ==========================================
+# HTTPS :443
+# Web + API
+# ==========================================
+
+<VirtualHost *:443>
+
+    ServerName ${CERT_HOST}
+
+    SSLEngine on
+    SSLCertificateFile /etc/httpd/ssl/server.crt
+    SSLCertificateKeyFile /etc/httpd/ssl/server.key
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    # APIサーバ（3000番）
+    ProxyPass        /routes/ http://127.0.0.1:3000/routes/
+    ProxyPassReverse /routes/ http://127.0.0.1:3000/routes/
+
+    # Webサーバ（80番）
+    ProxyPass        / http://127.0.0.1:80/
+    ProxyPassReverse / http://127.0.0.1:80/
+
+    ErrorLog /var/log/httpd/reverse_error.log
+    CustomLog /var/log/httpd/reverse_access.log combined
+
+</VirtualHost>
+
+
+# ==========================================
+# HTTPS :3333
+# API専用
+# ==========================================
+
+<VirtualHost *:3333>
+
+    ServerName ${CERT_HOST}
+
+    SSLEngine on
+    SSLCertificateFile /etc/httpd/ssl/server.crt
+    SSLCertificateKeyFile /etc/httpd/ssl/server.key
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+
+    # APIサーバ（3000番）
+    ProxyPass        /routes/ http://127.0.0.1:3000/routes/
+    ProxyPassReverse /routes/ http://127.0.0.1:3000/routes/
+
+    ErrorLog /var/log/httpd/route3333_error.log
+    CustomLog /var/log/httpd/route3333_access.log combined
+
+</VirtualHost>
+EOF
+
+# Apache設定チェック
+httpd -t
+
+# 必要なモジュールの確認
+MODULES=$(httpd -M)
+echo "$MODULES" | grep -q ssl_module
+echo "$MODULES" | grep -q proxy_module
+echo "$MODULES" | grep -q proxy_http_module
+echo "===== 4. Docker setup ====="
+systemctl enable --now docker
+usermod -aG docker ec2-user
+
+echo "===== 5. Clone application ====="
+cd /home/ec2-user
+
+if [ ! -d AstraWorks_Docker/.git ]; then
+  git clone https://github.com/O7922/AstraWorks_Docker.git
+else
+  git -C AstraWorks_Docker pull origin master
+fi
+
+cd /home/ec2-user/AstraWorks_Docker
+
+echo "===== 6. Docker Compose setup ====="
+ARCH=$(uname -m)
+
+case "$ARCH" in
+  x86_64)  COMPOSE_ARCH=x86_64 ;;
+  aarch64) COMPOSE_ARCH=aarch64 ;;
+  *)
+    echo "Unsupported architecture: $ARCH"
+    exit 1
+    ;;
+esac
+
+mkdir -p /usr/local/lib/docker/cli-plugins
+
+# AL2023標準Buildxとの互換性を考慮してComposeを固定
+COMPOSE_VERSION="v2.39.4"
+
+curl -fL --retry 3 \
+  "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-${COMPOSE_ARCH}" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+docker compose version
+docker buildx version
+
+echo "===== 7. Start application ====="
+docker compose up -d --build
+
+echo "===== 8. Start Apache HTTPS ====="
+systemctl enable --now httpd
+
+echo "===== 9. Verify ====="
+docker compose ps
+curl -k -I --max-time 15 https://localhost/ || true
+
+echo "===== SETUP COMPLETED ====="
+
+
+
+# MyDNS IPアドレス更新
+#dnf install -y curl
+
+# IPv4アドレスをMyDNSへ通知
+curl -fsS -u 'mydns004428:A2mtEqXDSE8' \
+  https://ipv4.mydns.jp/login.html
+
+cat > /etc/cron.d/mydns-update <<'EOF'
+*/5 * * * * root curl -fsS -u 'mydns004428:A2mtEqXDSE8' https://ipv4.mydns.jp/login.html >/dev/null 2>&1
+EOF
+
+chmod 600 /etc/cron.d/mydns-update
