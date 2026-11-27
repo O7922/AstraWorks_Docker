@@ -8,7 +8,7 @@ const placeNodeRouter = require('./routes/place_node');         // ← 追加(�
 
 const app = express();
 app.use(cors());
-app.use(express.json());   // ← POSTのJSONボディを読むため、ルート登録より前に置く
+app.use(express.json({ limit: "5000000mb" }));   // ← ここを変更// ← POSTのJSONボディを読むため、ルート登録より前に置く
 
 app.use((req, res, next) => {
     res.setHeader(
