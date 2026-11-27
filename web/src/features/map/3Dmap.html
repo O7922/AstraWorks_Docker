@@ -1059,9 +1059,9 @@ function addTracePoint(point) {
 // ルートノード / peer(隣接)関係のデータ管理
 //==========================================================
 
-const ROUTE_API_URL = "https://astrahost.astraworks.mydns.jp:3333/routes/route_editor3D";
-const PLACES_API_URL = "https://astrahost.astraworks.mydns.jp:3333/routes/places";
-const PLACE_NODE_API_URL = "https://astrahost.astraworks.mydns.jp:3333/routes/place_node";
+const ROUTE_API_URL = "https://astraworks.mydns.jp:3333/routes/route_editor3D";
+const PLACES_API_URL = "https://astraworks.mydns.jp:3333/routes/places";
+const PLACE_NODE_API_URL = "https://astraworks.mydns.jp:3333/routes/place_node";
 
 const nodePositions = new Map();
 const adjacency = new Map();
@@ -1203,7 +1203,7 @@ async function loadPlacesAndLinks() {
 //==========================================================
 
 const labelLayer = document.getElementById("labelLayer");
-const MAJOR_API_URL = "https://astrahost.astraworks.mydns.jp:3333/routes/place_node/majors";
+const MAJOR_API_URL = "https://astraworks.mydns.jp:3333/routes/place_node/majors";
 const MAJOR_LABEL_Y_OFFSET = 6;     // ノードの少し上に表示(m)
 
 const majorNames = new Map();   // nodeId -> string[]
